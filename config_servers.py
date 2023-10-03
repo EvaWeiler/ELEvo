@@ -1,0 +1,7 @@
+data_path = '/data/aswo/data/insitu_python/'
+movie_path = '/data/aswo/eweiler/elevo/movies/'
+frames_path = '/data/aswo/eweiler/elevo/frames/'
+results_path = '/data/aswo/eweiler/elevo/kinematics_insitu/'
+overview_path = '/data/aswo/eweiler/overview/'
+overview_frames_path = '/data/aswo/eweiler/overview/frames/'
+overview_movie_path = '/data/aswo/eweiler/overview/movie/'

@@ -85,6 +85,7 @@ from config_servers import *
 
 # In[2]:
 
+
 print('load positions')   
 
 #positions needed for arrival time/speed calculation and plotting below
@@ -107,10 +108,9 @@ if os.path.isdir(arr_outputdirectory) == False: os.mkdir(arr_outputdirectory)
 
 #remove text-file with arrival time/speed
 date_today_hours = datetime.now().strftime('%Y-%m-%d_%H')
-print('Date: ', date_today_hours)
 
 header = 'ID, time 21.5, lon, lat, initial speed, arrival time, error arrival time [h], arrival speed [km/s]'
-with open(arr_outputdirectory+'/ICME_arrival_'+date_today_hours+'.txt', "a") as f:
+with open(arr_outputdirectory+'/icme_arrival_'+date_today_hours+'.txt', "a") as f:
     f.write(header + '\n')
     f.close
 
@@ -270,7 +270,7 @@ def donki_kinematics(i):
     cme_b = [np.interp(time2_num, time1_num,cme_b[:,i]) for i in range(3)]
     cme_c = [np.interp(time2_num, time1_num,cme_c[:,i]) for i in range(3)]
     
-    with open(arr_outputdirectory+'/ICME_arrival_'+date_today_hours+'.txt', "ab") as f:
+    with open(arr_outputdirectory+'/icme_arrival_'+date_today_hours+'.txt', "ab") as f:
         np.savetxt(f, arrival, newline='\n', fmt='%s')
     
     return time2_num, cme_r, cme_lat, cme_lon, cme_a, cme_b, cme_c, cme_id, cme_v
@@ -1232,6 +1232,8 @@ print('done')
 
 plt.close('all')
 
+print('Define settings')
+
 #Coordinate System
 #frame='HCI'
 frame='HEEQ'
@@ -1284,6 +1286,8 @@ days_window=3    #size of in situ timerange
 if os.path.isdir(outputdirectory) == False: os.mkdir(outputdirectory)
 if os.path.isdir(animdirectory) == False: os.mkdir(animdirectory)
 
+print('done')
+
 #positions_plot_directory='results/plots_positions/'
 #if os.path.isdir(positions_plot_directory) == False: os.mkdir(positions_plot_directory)
 
@@ -1300,7 +1304,9 @@ if os.path.isdir(animdirectory) == False: os.mkdir(animdirectory)
 #for server
 #matplotlib.use('Qt5Agg')
 
-#get_ipython().run_line_magic('matplotlib', 'inline')
+print('Save kinematics plots and overview plot for current time')
+
+get_ipython().run_line_magic('matplotlib', 'inline')
 
 start_time=time.time()
 
@@ -1349,7 +1355,7 @@ make_frame3(k_today[0][0])
 #for i in np.arange(1,3,1):
 #    make_frame(i)
 
-#print('done') 
+print('done') 
 
 
 # ## Make full movie
@@ -1386,29 +1392,30 @@ print('time in min: ',np.round((time.time()-start_time)/60))
 print('plots done, frames saved in ',outputdirectory)
 
 
-# In[19]:
+# In[18]:
 
 
 date_today = datetime.now().strftime('%Y-%m-%d')
 
 os.system(ffmpeg_path+'ffmpeg -r 90 -i '+str(outputdirectory)+'/pos_anim_%05d.jpg -b 5000k \
-    -r 90 '+str(animdirectory)+'all_movies/ELEvo_'+date_today+'.mp4 -y -loglevel warning') 
+    -r 90 '+str(animdirectory)+'all_movies/elevo_'+date_today+'.mp4 -y -loglevel warning') 
 
 print('movie done, saved in ',animdirectory+'all_movies')
 
 
-# In[20]:
+# In[21]:
 
 
-copyfile = os.path.join(animdirectory, 'all_movies/ELEvo_'+date_today+'.mp4')
+copyfile = os.path.join(animdirectory, 'all_movies/elevo_'+date_today+'.mp4')
 shutil.copy(copyfile,animdirectory)
 
-os.rename(os.path.join(animdirectory, 'ELEvo_'+date_today+'.mp4'), os.path.join(animdirectory, 'ELEvo.mp4'))
-
-copyfile1 = os.path.join(arr_outputdirectory, 'ICME_arrival_'+date_today_hours+'.txt')
+os.rename(os.path.join(animdirectory, 'elevo_'+date_today+'.mp4'), os.path.join(animdirectory, 'elevo.mp4'))
+                                                                                
+copyfile1 = os.path.join(arr_outputdirectory, 'icme_arrival_'+date_today_hours+'.txt')
 shutil.copy(copyfile1,animdirectory)
 
-os.rename(os.path.join(animdirectory, 'ICME_arrival_'+date_today_hours+'.txt'), os.path.join(animdirectory, 'ELEvo_arrival_times.txt'))
+os.rename(os.path.join(animdirectory, 'icme_arrival_'+date_today_hours+'.txt'), os.path.join(animdirectory, 'elevo_arrival_times.txt'))                                                                                
+
 
 # In[ ]:
 

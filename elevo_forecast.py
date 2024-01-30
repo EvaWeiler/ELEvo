@@ -118,7 +118,7 @@ with open(arr_outputdirectory+'/icme_arrival_'+date_today_hours+'.txt', "a") as 
 # In[5]:
 
 
-date=(datetime.now()-timedelta(days=5)).strftime('%Y-%m-%d')
+date=(datetime.now()-timedelta(days=8)).strftime('%Y-%m-%d')
 
 url_donki='https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/CMEAnalysis?startDate='+date
 try: urllib.request.urlretrieve(url_donki,results_path+'DONKI.json')
@@ -129,7 +129,7 @@ data = pd.read_json(results_path+'DONKI.json')
 data['time21_5'] = mdates.date2num(data.time21_5)
 data = data.groupby('associatedCMEID').mean().reset_index()
 
-print('# CMEs within last 5 days: ', len(data))
+print('# CMEs within last 8 days: ', len(data))
 #print(data)
 #print('done')
 
@@ -1263,7 +1263,7 @@ date_today_hour = datetime.now().strftime(format_str)
 
 outputdirectory=frames_path#+str(date_today_hour)
 animdirectory=movie_path
-t_start = datetime.now().date()-timedelta(days=5)
+t_start = datetime.now().date()-timedelta(days=8)
 t_end  = datetime.now().date()+timedelta(days=3)
 
 #res_in_days=1/72. #every 20min
@@ -1306,7 +1306,7 @@ print('done')
 
 print('Save kinematics plots and overview plot for current time')
 
-get_ipython().run_line_magic('matplotlib', 'inline')
+#get_ipython().run_line_magic('matplotlib', 'inline')
 
 start_time=time.time()
 
@@ -1403,7 +1403,7 @@ os.system(ffmpeg_path+'ffmpeg -r 90 -i '+str(outputdirectory)+'/pos_anim_%05d.jp
 print('movie done, saved in ',animdirectory+'all_movies')
 
 
-# In[21]:
+# In[19]:
 
 
 copyfile = os.path.join(animdirectory, 'all_movies/elevo_'+date_today+'.mp4')

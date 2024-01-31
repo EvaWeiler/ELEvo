@@ -285,7 +285,7 @@ print('Generating kinematics using ELEvo')
 
 start_time = time.time()
 
-used=len(data)
+used=10#len(data)
 print('Using multiprocessing, nr of cores',mp.cpu_count(),', nr of processes used: ',used)
 pool=mp.get_context('fork').Pool(processes=used)
 
@@ -1379,12 +1379,14 @@ print('Using multiprocessing, nr of cores',multiprocessing.cpu_count(), \
 
 #run multiprocessing pool to make all movie frames, depending only on frame number
 
-pool = mp.Pool(processes=nr_of_processes_used)
+pool=mp.get_context('fork').Pool(processes=used)
+
+#pool = mp.Pool(processes=nr_of_processes_used)
 #input=[i for i in range(k_all)]
 input=[i for i in np.arange(1,k_all,1)]
 pool.map(make_frame, input)
-#pool.close()
-# pool.join()
+pool.close()
+pool.join()
 #for i in input:
  #   make_frame2(i)
 

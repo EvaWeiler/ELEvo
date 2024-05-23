@@ -51,8 +51,8 @@ import pdb
 import pickle
 import seaborn as sns
 import sys
-import heliopy.data.spice as spicedata
-import heliopy.spice as spice
+#import heliopy.data.spice as spicedata
+#import heliopy.spice as spice
 import astropy
 import importlib    
 import time
@@ -69,11 +69,11 @@ import shutil
 import warnings
 warnings.filterwarnings('ignore')
 
-from heliocats import data as hd
-importlib.reload(hd) #reload again while debugging
+#from heliocats import data as hd
+#importlib.reload(hd) #reload again while debugging
 
-from heliocats import plot as hp
-importlib.reload(hp) #reload again while debugging
+#from heliocats import plot as hp
+#importlib.reload(hp) #reload again while debugging
 
 #where the in situ data files are located is read 
 from config_servers import *
@@ -83,7 +83,108 @@ from config_servers import *
 
 # ## generate DONKI kinematics (using elevo) & arrival times/speeds
 
-# In[2]:
+# In[3]:
+
+def cart2sphere(x,y,z):
+    r = np.sqrt(x**2+ y**2 + z**2)           
+    theta = np.arctan2(z,np.sqrt(x**2+ y**2))
+    phi = np.arctan2(y,x)                    
+    return (r, theta, phi)
+
+def plot_stereo_hi_fov(pos, time_num, timeind,ax,sc):    
+    
+    #plots the STA FOV HI1 HI2
+    
+    #STB never flipped the camera:    
+    if sc=='B': 
+        ang1d=-4
+        ang2d=-24
+        ang3d=-18
+        ang4d=-88
+        lcolor='blue'
+    
+    if sc=='A': 
+        ang1d=4
+        ang2d=24
+        ang3d=18
+        ang4d=88
+        lcolor='red'
+
+        #STA flipped during conjunction
+        if mdates.date2num(datetime(2015,11,1))<time_num<mdates.date2num(datetime(2023,8,12)):  
+            ang1d=-4
+            ang2d=-24
+            ang3d=-18
+            ang4d=-88
+
+
+
+    #calculate endpoints
+    
+    #sta position
+    x0=pos.x[timeind]
+    y0=pos.y[timeind]
+    z0=0
+    
+    #sta position 180° rotated    
+    x1=-pos.x[timeind]
+    y1=-pos.y[timeind]
+    z1=0
+    
+    #rotate by 4 deg for HI1 FOV
+    ang=np.deg2rad(ang1d)
+    rot=np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])    
+    [x2,y2]=np.dot(rot,[x1,y1])
+    z2=0    
+    #add to sta position
+    x2f=x0+x2
+    y2f=y0+y2    
+    z2f=0
+    
+    #rotate 2
+    ang2=np.deg2rad(ang2d)
+    rot2=np.array([[np.cos(ang2), -np.sin(ang2)], [np.sin(ang2), np.cos(ang2)]])    
+    [x3,y3]=np.dot(rot2,[x1,y1])
+    z3=0    
+    #add to sta position
+    x3f=x0+x3
+    y3f=y0+y3    
+    z3f=0
+    
+    #rotate 3
+    ang3=np.deg2rad(ang3d)
+    rot3=np.array([[np.cos(ang3), -np.sin(ang3)], [np.sin(ang3), np.cos(ang3)]])    
+    [x4,y4]=np.dot(rot3,[x1,y1])
+    z4=0    
+    #add to sta position
+    x4f=x0+x4
+    y4f=y0+y4    
+    z4f=0    
+
+    #rotate 4
+    ang4=np.deg2rad(ang4d)
+    rot4=np.array([[np.cos(ang4), -np.sin(ang4)], [np.sin(ang4), np.cos(ang4)]])    
+    [x5,y5]=np.dot(rot4,[x1,y1])
+    z5=0    
+    #add to sta position
+    x5f=x0+x5
+    y5f=y0+y5    
+    z5f=0    
+
+    
+    #convert to polar coordinates and plot
+    [r0,t0,lon0]=cart2sphere(x0,y0,z0)    
+    #[r1,t1,lon1]=hd.cart2sphere(x1,y1,z1)    
+    [r2,t2,lon2]=cart2sphere(x2f,y2f,z2f)    
+    [r3,t3,lon3]=cart2sphere(x3f,y3f,z3f)    
+    [r4,t4,lon4]=cart2sphere(x4f,y4f,z4f)    
+    [r5,t5,lon5]=cart2sphere(x5f,y5f,z5f)    
+    
+    #ax.plot([lon0,lon1],[r0,r1],'--r',alpha=0.5)
+    ax.plot([lon0,lon2],[r0,r2],linestyle='-',color=lcolor,alpha=0.3)
+    ax.plot([lon0,lon3],[r0,r3],linestyle='-',color=lcolor,alpha=0.3)
+    ax.plot([lon0,lon4],[r0,r4],linestyle='--',color=lcolor,alpha=0.3)
+    ax.plot([lon0,lon5],[r0,r5],linestyle='--',color=lcolor,alpha=0.3)
 
 
 print('load positions')   
@@ -97,6 +198,7 @@ print('done')
 # In[3]:
 
 
+today = datetime.today()
 date_today = datetime.now().strftime('%Y-%m-%d')
 arr_outputdirectory=arrival_path+str(date_today)
 
@@ -105,20 +207,25 @@ if os.path.isdir(arr_outputdirectory) == False: os.mkdir(arr_outputdirectory)
 
 # In[4]:
 
-
-#remove text-file with arrival time/speed
 date_today_hours = datetime.now().strftime('%Y-%m-%d_%H')
+date_today_minutes = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-header = 'ID, time 21.5, lon, lat, initial speed, arrival time, error arrival time [h], arrival speed [km/s]'
+header = r'ID, time 21.5 [UT, at 21.5 R_Sun], lon [deg], lat [deg], initial speed [km/s], arrival time [UTC], error arrival time [h], arrival speed [km/s], error arrival speed [km/s]'
 with open(arr_outputdirectory+'/icme_arrival_'+date_today_hours+'.txt', "a") as f:
+    f.write('ASWO, GeoSphere Austria - created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n')
+    f.write(header + '\n')
+    f.close
+    
+header = r'ID, time 21.5 [UT, at 21.5 R_Sun], lon [deg], lat [deg], initial speed [km/s], arrival time @SolarOrbiter [UTC], error arrival time [h], arrival speed @SolarOrbiter [km/s], error arrival speed [km/s]'
+with open(arr_outputdirectory+'/icme_arrival_solo_'+date_today_hours+'.txt', "a") as f:
+    f.write('ASWO, GeoSphere Austria - created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n')
     f.write(header + '\n')
     f.close
 
+# In[6]:
 
-# In[5]:
 
-
-date=(datetime.now()-timedelta(days=8)).strftime('%Y-%m-%d')
+date=(datetime.now()-timedelta(days=14)).strftime('%Y-%m-%d')
 
 url_donki='https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/CMEAnalysis?startDate='+date
 try: urllib.request.urlretrieve(url_donki,results_path+'DONKI.json')
@@ -129,37 +236,57 @@ data = pd.read_json(results_path+'DONKI.json')
 data['time21_5'] = mdates.date2num(data.time21_5)
 data = data.groupby('associatedCMEID').mean().reset_index()
 
-print('# CMEs within last 8 days: ', len(data))
-#print(data)
-#print('done')
+print(data.associatedCMEID)
+print('# CMEs within last 13 days: ', len(data))
 
 
-# In[6]:
+# In[7]:
 
 
 def donki_kinematics(i):
-    #print(f'Processing CME {i+1}')
+    print(f'Processing CME {i+1}')
     
-    r21_t0 = mdates.num2date(data.time21_5)
     distance0 = 21.5*u.solRad.to(u.km)
-    t0 = pd.to_datetime(r21_t0)
     t0_num = data.time21_5
+    t0 = mdates.num2date(t0_num)
     gamma_init = 0.1
     ambient_wind_init = 400.
-    kindays = 20
+    kindays = 15
     n_ensemble = 100000
-    halfwidth = np.deg2rad(35.)
+    halfwidth = np.deg2rad(data.halfAngle[i])
     res_in_min = 10
     f = 0.7
-
+    kindays_in_min = int(kindays*24*60/res_in_min)
+    
+    #for sc in ['earth', 'solo']:
+    
     dct = t0_num[i]-earth.time
     earth_ind = np.argmin(np.abs(dct))
-    
+
     if np.abs(np.deg2rad(data.longitude[i])) + np.abs(earth.lon[earth_ind]) > np.pi and np.sign(np.deg2rad(data.longitude[i])) != np.sign(earth.lon[earth_ind]):
         delta_earth = np.deg2rad(data.longitude[i]) - (earth.lon[earth_ind] + 2 * np.pi * np.sign(np.deg2rad(data.longitude[i])))
-        
+
     else:
         delta_earth = np.deg2rad(data.longitude[i]) - earth.lon[earth_ind]
+        
+        
+    dct = t0_num[i]-solo.time
+    solo_ind = np.argmin(np.abs(dct))
+    
+    t0_num_kindays = mdates.date2num(mdates.num2date(t0_num[i])+timedelta(days=kindays))
+    dct2 = t0_num_kindays-solo.time
+    solo_ind2 = np.argmin(np.abs(dct2))
+    
+    delta_solo_list = []
+    for j in range(kindays_in_min):
+        if np.abs(np.deg2rad(data.longitude[i])) + np.abs(solo.lon[solo_ind+j:solo_ind+(j+1)]) > np.pi and np.sign(np.deg2rad(data.longitude[i])) != np.sign(solo.lon[solo_ind+j:solo_ind+(j+1)]):
+            delta_solo = (np.deg2rad(data.longitude[i]) - (solo.lon[solo_ind+j:solo_ind+(j+1)] + 2 * np.pi * np.sign(np.deg2rad(data.longitude[i]))))[0]
+
+        else:
+            delta_solo = (np.deg2rad(data.longitude[i]) - solo.lon[solo_ind+j:solo_ind+(j+1)])[0]
+            
+        delta_solo_list.append(delta_solo)
+
         
     #times for each event kinematic
     time1=[]
@@ -173,51 +300,54 @@ def donki_kinematics(i):
 
     #make kinematics
     
-    kindays_in_min = int(kindays*24*60/res_in_min)
-    
     timestep=np.zeros([kindays_in_min,n_ensemble])
     cme_r=np.zeros([kindays_in_min, 3])
     cme_v=np.zeros([kindays_in_min, 3])
     cme_lon=np.ones(kindays_in_min)*data.longitude[i]
     cme_lat=np.ones(kindays_in_min)*data.latitude[i]
     cme_id=np.chararray(kindays_in_min, itemsize=27)
+    cme_id[:]=data.associatedCMEID[i]
     cme_r_ensemble=np.zeros([kindays_in_min, n_ensemble])
     cme_v_ensemble=np.zeros([kindays_in_min, n_ensemble])
     cme_delta=delta_earth*np.ones([kindays_in_min,3])
+    cme_delta_solo = [[x] * 3 for x in delta_solo_list]
     cme_hit=np.zeros(kindays_in_min)
     cme_hit[np.abs(delta_earth)<halfwidth] = 1
+    cme_hit_solo=np.zeros(kindays_in_min)
+    cme_hit_solo[np.abs(delta_solo_list[0])<halfwidth] = 1
     distance_earth = np.empty([kindays_in_min,3])
+    distance_solo = np.empty([kindays_in_min,3])
     distance_earth[:] = np.nan
+    distance_solo[:] = np.nan
+        
+    kindays_in_min = int(kindays*24*60/res_in_min)
     
-    for j in np.arange(0,len(cme_r)-1,1):
+    gamma = np.abs(np.random.normal(gamma_init,0.025,n_ensemble))
+    ambient_wind = np.random.normal(ambient_wind_init,50,n_ensemble)
+    speed = np.random.normal(data.speed[i],50,n_ensemble)
+    
+    timesteps = np.arange(kindays_in_min)*res_in_min*60
+    timesteps = np.vstack([timesteps]*n_ensemble)
+    timesteps = np.transpose(timesteps)
 
-        cme_id[0]=data.associatedCMEID[i]
-        cme_id[j+1]=data.associatedCMEID[i]
-        cme_r[0]=distance0*u.km.to(u.au)
-        cme_v[0]=data.speed[i]
+    accsign = np.ones(n_ensemble)
+    accsign[speed < ambient_wind] = -1.
 
-        timestep[j+1]=timestep[j]+res_in_min*60 #seconds (speed given in kilometers per second)
+    distance0_list = np.ones(n_ensemble)*distance0
+    
+    cme_r_ensemble = (accsign / (gamma * 1e-7)) * np.log(1 + (accsign * (gamma * 1e-7) * ((speed - ambient_wind) * timesteps))) + ambient_wind * timesteps + distance0_list
+    cme_v_ensemble = (speed - ambient_wind) / (1 + (accsign * (gamma * 1e-7) * (speed - ambient_wind) * timesteps)) + ambient_wind
 
-        gamma = np.abs(np.random.normal(gamma_init,0.025,n_ensemble))
-        ambient_wind = np.random.normal(ambient_wind_init,50,n_ensemble)
-        speed = np.random.normal(data.speed[i],50,n_ensemble)
-        
-        accsign = np.ones(n_ensemble)
-        accsign[speed < ambient_wind] = -1.
-
-        distance0_list = np.array(distance0*np.ones(n_ensemble))
-        
-        #calculate radial distance for each timestep, CME, and ensemble member
-        cme_r_ensemble[j+1] = accsign / (gamma * 1e-7) * np.log(1 + accsign * (gamma * 1e-7) * (speed - ambient_wind) * timestep[j+1]) + ambient_wind * timestep[j+1] + distance0_list
-        cme_v_ensemble[j+1] = (speed - ambient_wind) / (1 + (accsign * (gamma * 1e-7) * (speed - ambient_wind) * timestep[j+1])) + ambient_wind
-        
-        cme_r[j+1][0]=np.mean(cme_r_ensemble[j+1])*u.km.to(u.au)
-        cme_r[j+1][1]=np.mean(cme_r_ensemble[j+1])*u.km.to(u.au) - 2*np.std(cme_r_ensemble[j+1])*u.km.to(u.au)
-        cme_r[j+1][2]=np.mean(cme_r_ensemble[j+1])*u.km.to(u.au) + 2*np.std(cme_r_ensemble[j+1])*u.km.to(u.au)
-        
-        cme_v[j+1][0]=np.mean(cme_v_ensemble[j+1])
-        cme_v[j+1][1]=np.mean(cme_v_ensemble[j+1]) - 2*np.std(cme_v_ensemble[j+1])
-        cme_v[j+1][2]=np.mean(cme_v_ensemble[j+1]) + 2*np.std(cme_v_ensemble[j+1])
+    cme_r_mean = cme_r_ensemble.mean(1)
+    cme_r_std = cme_r_ensemble.std(1)
+    cme_v_mean = cme_v_ensemble.mean(1)
+    cme_v_std = cme_v_ensemble.std(1)
+    cme_r[:,0]= cme_r_mean*u.km.to(u.au)
+    cme_r[:,1]=(cme_r_mean - 2*cme_r_std)*u.km.to(u.au) 
+    cme_r[:,2]=(cme_r_mean + 2*cme_r_std)*u.km.to(u.au)
+    cme_v[:,0]= cme_v_mean
+    cme_v[:,1]=(cme_v_mean - 2*cme_v_std)
+    cme_v[:,2]=(cme_v_mean + 2*cme_v_std)
     
     #Ellipse parameters   
     theta = np.arctan(f**2*np.ones([kindays_in_min,3]) * np.tan(halfwidth*np.ones([kindays_in_min,3])))
@@ -229,22 +359,8 @@ def donki_kinematics(i):
     root = np.sin(cme_delta)**2 * f**2*np.ones([kindays_in_min,3]) * (cme_b**2 - cme_c**2) + np.cos(cme_delta)**2 * cme_b**2
     distance_earth[cme_hit.all() == 1] = (cme_c * np.cos(cme_delta) + np.sqrt(root)) / (np.sin(cme_delta)**2 * f**2*np.ones([kindays_in_min,3]) + np.cos(cme_delta)**2) #distance from SUN in AU for given point on ellipse
     
-    arr_time = []
-    arrival = []
-    if np.isnan(distance_earth).all() == False:
-
-        for t in range(3):
-            index = np.argmin(np.abs(distance_earth[:,t] - earth.r[earth_ind]))
-            distance_diff = np.diff(distance_earth[:,t]*u.au.to(u.km))
-            time_diff = np.diff(timestep[:,i])
-            speed = distance_diff / time_diff
-            arr_time.append(time1[int(index)])
-            #arr_speed.append(speed[int(index-1)])
-        
-        arr_speed = cme_v[:,0][index]
-        err_arr_speed = cme_v[:,2][index]-cme_v[:,1][index]
-        err_arr_time = (arr_time[1]-arr_time[2]).total_seconds()/3600.   
-        arrival.append([cme_id[i], r21_t0[i], cme_lon[i], cme_lat[i], data.speed[i], arr_time[0], np.round(err_arr_time,2), arr_speed, np.round(err_arr_speed,2)])  
+    root_solo = np.sin(cme_delta_solo)**2 * f**2*np.ones([kindays_in_min,3]) * (cme_b**2 - cme_c**2) + np.cos(cme_delta_solo)**2 * cme_b**2
+    distance_solo[cme_hit_solo.all() == 1] = (cme_c * np.cos(cme_delta_solo) + np.sqrt(root_solo)) / (np.sin(cme_delta_solo)**2 * f**2*np.ones([kindays_in_min,3]) + np.cos(cme_delta_solo)**2) 
         
     #### linear interpolate to 10 min resolution
 
@@ -261,31 +377,85 @@ def donki_kinematics(i):
 
     time2_num=parse_time(time2).plot_date        
     time1_num=parse_time(time1).plot_date
+    
+    arr_time = []
+    arrival = []
+    arr_time_fin = []
+    arr_time_err0 = []
+    arr_time_err1 = []
+    arr_id = []
+    arr_hit = []
+    if np.isnan(distance_earth).all() == False:
 
+        for t in range(3):
+            index = np.argmin(np.abs(distance_earth[:,t] - earth.r[earth_ind]))
+            arr_time.append(time1[int(index)])
+        
+        arr_speed = cme_v[:,0][index]
+        err_arr_speed = cme_v[:,2][index]-cme_v[:,1][index]
+        err_arr_time = (arr_time[1]-arr_time[2]).total_seconds()/3600.   
+        arrival.append([cme_id[0].decode("utf-8"), t0[i].strftime('%Y-%m-%dT%H:%MZ'), "{:.1f}".format(cme_lon[0]), "{:.1f}".format(cme_lat[0]), "{:.1f}".format(data.speed[i]), arr_time[0].strftime('%Y-%m-%dT%H:%MZ'), "{:.2f}".format(err_arr_time/2), "{:.2f}".format(arr_speed), "{:.2f}".format(err_arr_speed/2)])   
+        arr_time_fin.append(arr_time[0])
+        arr_time_err0.append(arr_time[0]-timedelta(hours=err_arr_time))
+        arr_time_err1.append(arr_time[0]+timedelta(hours=err_arr_time))
+        arr_id.append(cme_id[0].decode("utf-8"))
+        arr_hit.append(1.)
+        
+    else:
+        arr_time_fin.append(np.nan)
+        arr_time_err0.append(np.nan)
+        arr_time_err1.append(np.nan)
+        arr_id.append(np.nan)
+        arr_hit.append(np.nan)
+
+        
+    arr_time_solo = []
+    arrival_solo = []
+    if np.isnan(distance_solo).all() == False:
+
+        for t in range(3):
+            index_solo = np.argmin(np.abs(np.ma.array(distance_solo[:,t], mask=np.isnan(distance_solo[:,t])) - solo.r[solo_ind:solo_ind2]))            
+            arr_time_solo.append(time1[int(index_solo)])
+        
+        arr_speed_solo = cme_v[:,0][index_solo]
+        err_arr_speed_solo = cme_v[:,2][index_solo]-cme_v[:,1][index_solo]
+        err_arr_time_solo = (arr_time_solo[1]-arr_time_solo[2]).total_seconds()/3600.   
+        arrival_solo.append([cme_id[0].decode("utf-8"), t0[i].strftime('%Y-%m-%dT%H:%MZ'), "{:.1f}".format(cme_lon[0]), "{:.1f}".format(cme_lat[0]), "{:.1f}".format(data.speed[i]), arr_time_solo[0].strftime('%Y-%m-%dT%H:%MZ'), "{:.2f}".format(err_arr_time_solo/2), "{:.2f}".format(arr_speed_solo), "{:.2f}".format(err_arr_speed_solo/2)])           
+    
     #linear interpolation to time_mat times    
     cme_r = [np.interp(time2_num, time1_num,cme_r[:,i]) for i in range(3)]
+    cme_v = [np.interp(time2_num, time1_num,cme_v[:,i]) for i in range(3)]
     cme_lat = np.interp(time2_num, time1_num,cme_lat )
     cme_lon = np.interp(time2_num, time1_num,cme_lon )
     cme_a = [np.interp(time2_num, time1_num,cme_a[:,i]) for i in range(3)]
     cme_b = [np.interp(time2_num, time1_num,cme_b[:,i]) for i in range(3)]
     cme_c = [np.interp(time2_num, time1_num,cme_c[:,i]) for i in range(3)]
+    #arr_time = np.interp(time2_num, time1_num,arr_time_fin_list)
+    #arr_time_err = np.interp(time2_num, time1_num,arr_time_err_list) 
     
     with open(arr_outputdirectory+'/icme_arrival_'+date_today_hours+'.txt', "ab") as f:
         np.savetxt(f, arrival, newline='\n', fmt='%s')
+        
+    with open(arr_outputdirectory+'/icme_arrival_solo_'+date_today_hours+'.txt', "ab") as f:
+        np.savetxt(f, arrival_solo, newline='\n', fmt='%s')
     
-    return time2_num, cme_r, cme_lat, cme_lon, cme_a, cme_b, cme_c, cme_id, cme_v
+    return time2_num, cme_r, cme_lat, cme_lon, cme_a, cme_b, cme_c, cme_id, cme_v, arr_time_fin, arr_time_err0, arr_time_err1, arr_id, arr_hit
 
 #print('done')
 
 
-# In[7]:
+# In[8]:
 
 
 print('Generating kinematics using ELEvo')
 
 start_time = time.time()
 
-used=10#len(data)
+if len(data) >= 5:
+    used=5
+else:
+    used=1
+    
 print('Using multiprocessing, nr of cores',mp.cpu_count(),', nr of processes used: ',used)
 pool=mp.get_context('fork').Pool(processes=used)
 
@@ -297,7 +467,7 @@ pool.join()
 print('Done in: ',np.round((time.time()-start_time)), 'seconds')
 
 
-# In[8]:
+# In[9]:
 
 
 hc_time_num = [result[0] for result in results]
@@ -325,12 +495,27 @@ hc_id = [result[7] for result in results]
 hc_id1 = np.concatenate(hc_id)
 
 hc_v = [result[8] for result in results]
-hc_v1 = np.concatenate(hc_v)
+hc_v1 = np.concatenate(hc_v, axis=1)
 
-pickle.dump([hc_time_num1, hc_r1, hc_lat1, hc_lon1, hc_id1, a1_ell, b1_ell, c1_ell], open(results_path+'donki_kinematics.p', "wb"))
+hc_arr_time = [result[9] for result in results]
+hc_arr_time1 = np.concatenate(hc_arr_time)
+
+hc_err_arr_time_min = [result[10] for result in results]
+hc_err_arr_time_min1 = np.concatenate(hc_err_arr_time_min)
+
+hc_err_arr_time_max = [result[11] for result in results]
+hc_err_arr_time_max1 = np.concatenate(hc_err_arr_time_max)
+
+hc_arr_id = [result[12] for result in results]
+hc_arr_id1 = np.concatenate(hc_arr_id)
+
+hc_arr_hit = [result[13] for result in results]
+hc_arr_hit1 = np.concatenate(hc_arr_hit)
+
+pickle.dump([hc_time_num1, hc_r1, hc_lat1, hc_lon1, hc_id1, a1_ell, b1_ell, c1_ell, hc_arr_time1, hc_err_arr_time_min1, hc_err_arr_time_max1, hc_arr_id1, hc_arr_hit1], open(results_path+'donki_kinematics.p', "wb"))
 
 
-# In[9]:
+# In[10]:
 
 
 def plot_kinematics(x,y,z):
@@ -345,7 +530,7 @@ def plot_kinematics(x,y,z):
     plt.savefig(filename,dpi=200, edgecolor='none')
 
     plt.figure(2, figsize=(15,8))
-    plt.plot(mdates.num2date(x), z[:,0], 'bo', ms=1)
+    plt.plot(mdates.num2date(x), z[0], 'bo', ms=1)
     plt.xlabel('Time')
     plt.ylabel('Velocity [km/s]')
     
@@ -354,15 +539,9 @@ def plot_kinematics(x,y,z):
     plt.close('all')
 
 
-# In[10]:
-
-
-[hc_time_num1, hc_r1, hc_lat1, hc_lon1, hc_name1, a1_ell, b1_ell, c1_ell]=pickle.load(open(results_path+'donki_kinematics.p', "rb"))
-
-
 # ### define functions
 
-# In[11]:
+# In[32]:
 
 
 def make_frame(k):
@@ -381,7 +560,7 @@ def make_frame(k):
 
 
     frame_time_str=str(mdates.num2date(frame_time_num+k*res_in_days))
-   
+    
     #these have their own times
     
     dct=frame_time_num+k*res_in_days-psp.time
@@ -411,10 +590,8 @@ def make_frame(k):
     ax.scatter(mars.lon[earth_timeind], mars.r[earth_timeind]*np.cos(mars.lat[earth_timeind]), s=symsize_planet, c='orangered', alpha=0.7,lw=0,zorder=3)
 
 
-
-
     #plot stereoa fov hi1/2    
-    hp.plot_stereo_hi_fov(sta,frame_time_num, sta_timeind, ax,'A')
+    plot_stereo_hi_fov(sta,frame_time_num, sta_timeind, ax,'A')
 
 
 
@@ -464,12 +641,11 @@ def make_frame(k):
 
     ######################## 1 plot all active CME circles
 
-    plot_hi_geo=True
+    cmeind1=np.where(hc_time_num1 == frame_time_num+k*res_in_days)
     
+    plot_hi_geo=True    
     
     if plot_hi_geo:
-        
-        cmeind1=np.where(hc_time_num1 == frame_time_num+k*res_in_days)
 
         for p in range(0,np.size(cmeind1)):
             
@@ -520,8 +696,8 @@ def make_frame(k):
         nindex2=np.where(n_time_num > time_now+days_window)[0][0]
         #use last index   oindex2=np.size(o1)-1
         n=n1[nindex1:nindex2]
-        #if np.isnan(n.bt).all():
-         #   n.bt=np.nan
+        if np.isnan(n.bt).all():
+            n.bt=np.nan
     elif np.logical_and((n_time_num[-1] < time_now+days_window),(n_time_num[-1] > time_now-days_window)):
         nindex1=np.where(n_time_num > time_now-days_window)[0][0]
         nindex2=np.size(n1)-1
@@ -532,6 +708,8 @@ def make_frame(k):
         sindex1=np.where(s_time_num > time_now-days_window)[0][0]
         sindex2=np.where(s_time_num > time_now+days_window)[0][0]
         s=s1[sindex1:sindex2]
+        if np.isnan(s.bt).all():
+            s.bt=np.nan
     elif np.logical_and((s_time_num[-1] < time_now+days_window),(s_time_num[-1] > time_now-days_window)):
         sindex1=np.where(s_time_num > time_now-days_window)[0][0]
         sindex2=np.size(s1)-1
@@ -541,7 +719,11 @@ def make_frame(k):
     #---------------- NOAA mag
 
     ax4 = plt.subplot2grid((3,2), (0, 1))
-    ax4.plot_date([time_now,time_now], [-1000,1000],'-k', lw=0.5, alpha=0.8)
+    ax4.plot_date([time_now,time_now], [-1000,1000],'-k', lw=0.7, alpha=0.8)
+    ax4.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
+    ax4.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    ax4.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+
     ax4.set_xticklabels([])
     ax4.set_xlim(time_now-days_window,time_now+days_window)
     ax4.set_ylabel('B [nT] GSM',fontsize=fsize-1)
@@ -555,15 +737,30 @@ def make_frame(k):
         plt.plot_date(n.time,n.by,'-g',label='BT',linewidth=0.5)
         plt.plot_date(n.time,n.bz,'-b',label='BN',linewidth=0.5)
         plt.plot_date(n.time,n.bt,'-k',label='Btotal',lw=0.5)
-
+        
+        for i in range(len(hc_arr_time1)):
+            if np.isnan(hc_arr_hit1[i]) == False:       
+                ax4.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
+                ax4.annotate(hc_arr_id1[i][0:16], (hc_arr_time1[i], np.nanmax(n.bt)+5), fontsize=10, rotation=90)
+                
         if np.isfinite(np.nanmin(-n.bt)):         
             ax4.set_ylim(np.nanmin(-n.bt)-5, np.nanmax(n.bt)+5)
+       
+                
+
+
 
 
     #----------------  STEREO-A mag
     
     ax6 = plt.subplot2grid((3,2), (1, 1))
     ax6.plot_date([time_now,time_now], [-100,100],'-k', lw=0.5, alpha=0.8)
+    ax6.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
+    ax6.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    ax6.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    for i in range(len(hc_arr_time1)):
+        ax6.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
+        
     ax6.set_xlim(time_now-days_window,time_now+days_window)
     ax6.set_xticklabels([])
     ax6.set_ylabel('B [nT] GSM',fontsize=fsize-1)
@@ -586,8 +783,13 @@ def make_frame(k):
     ax5 = plt.subplot2grid((3,2), (2, 1))
     ax5.set_xlim(time_now-days_window,time_now+days_window)
     ax5.plot_date([time_now,time_now], [0,800],'-k', lw=0.5, alpha=0.8)
+    ax5.plot_date([hc_arr_time1,hc_arr_time1], [-1000,10000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
+    ax5.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,10000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    ax5.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,10000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    for i in range(len(hc_arr_time1)):
+        ax5.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
     plt.ylabel('V [km/s]',fontsize=fsize-1)
-    plt.ylim((240, 750))
+    #plt.ylim((240, 750))
     plt.yticks(fontsize=fsize-1)
     ax5.xaxis.set_major_formatter( matplotlib.dates.DateFormatter('%b-%d') )
     #ax5.set_xticklabels([])
@@ -595,33 +797,40 @@ def make_frame(k):
     if np.size(s)>0:
         plt.plot_date(s.time,s.vt,'-r',label='STEREO-A',linewidth=0.7)
     if np.size(n)>0:
-        plt.plot_date(n.time,n.vt,'-g',label='V',linewidth=0.7)   
-
+        plt.plot_date(n.time,n.vt,'-g',label='V',linewidth=0.7)  
+        ax5.set_ylim(200, np.nanmax(n.vt)+20)
+        
+    elif np.size(n) == 0:
+        ax5.set_ylim(200,750)
+        
 
     plt.figtext(0.95,0.77,'NOAA', color='mediumseagreen', ha='center',fontsize=fsize+3)
     plt.figtext(0.95,0.49,'STEREO-A', color='red', ha='center',fontsize=fsize+3)
     plt.figtext(0.95,0.23,'NOAA', color='mediumseagreen', ha='center',fontsize=fsize+3)
     plt.figtext(0.95,0.18,'STEREO-A', color='red', ha='center',fontsize=fsize+3)
-    plt.figtext(0.92,0.93,r'B$_{\mathrm{x}}$', color='red', ha='center',fontsize=fsize)
-    plt.figtext(0.94,0.93,r'B$_{\mathrm{y}}$', color='green', ha='center',fontsize=fsize)
-    plt.figtext(0.96,0.93,r'B$_{\mathrm{z}}$', color='blue', ha='center',fontsize=fsize)
-    plt.figtext(0.98,0.93,r'B$_{\mathrm{tot}}$', color='black', ha='center',fontsize=fsize)
+    plt.figtext(0.92,0.91,r'B$_{\mathrm{x}}$', color='red', ha='center',fontsize=fsize)
+    plt.figtext(0.94,0.91,r'B$_{\mathrm{y}}$', color='green', ha='center',fontsize=fsize)
+    plt.figtext(0.96,0.91,r'B$_{\mathrm{z}}$', color='blue', ha='center',fontsize=fsize)
+    plt.figtext(0.98,0.91,r'B$_{\mathrm{tot}}$', color='black', ha='center',fontsize=fsize)
     
     ############################
 
     #plot text for date extra so it does not move 
+    f0=plt.figtext(0.207,0.93,str(mdates.num2date(frame_time_num+k*res_in_days).strftime('%A'))[0:3],  ha='left',color=backcolor,fontsize=fsize+6)
     #year
-    f1=plt.figtext(0.45,0.93,frame_time_str[0:4],  ha='center',color=backcolor,fontsize=fsize+6)
+    f1=plt.figtext(0.24,0.93,frame_time_str[0:4],  ha='left',color=backcolor,fontsize=fsize+6)
     #month
-    f2=plt.figtext(0.45+0.04,0.93,frame_time_str[5:7], ha='center',color=backcolor,fontsize=fsize+6)
+    f2=plt.figtext(0.24+0.04,0.93,frame_time_str[5:7], ha='left',color=backcolor,fontsize=fsize+6)
     #day
-    f3=plt.figtext(0.45+0.08,0.93,frame_time_str[8:10], ha='center',color=backcolor,fontsize=fsize+6)
+    f3=plt.figtext(0.245+0.06,0.93,frame_time_str[8:10], ha='left',color=backcolor,fontsize=fsize+6)
     #hours
-    f4=plt.figtext(0.45+0.12,0.93,frame_time_str[11:13], ha='center',color=backcolor,fontsize=fsize+6)
+    f4=plt.figtext(0.24+0.09,0.93,frame_time_str[11:13], ha='left',color=backcolor,fontsize=fsize+6)
     
-    f5=plt.figtext(0.45+0.16,0.93,'UTC', ha='center',color=backcolor,fontsize=fsize+6)
+    f5=plt.figtext(0.24+0.13,0.93,'UTC', ha='center',color=backcolor,fontsize=fsize+6)
     
-    plt.figtext(0.02, 0.08,'DONKI (CCMC) - kinematics: ELEvo', fontsize=fsize-1, ha='left',color='tab:blue')
+    plt.figtext(0.02, 0.08, 'created: '+ str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC', fontsize=fsize-3, ha='left', color=backcolor)
+    
+    plt.figtext(0.02, 0.1,'DONKI (CCMC) - kinematics: ELEvo', fontsize=fsize-1, ha='left',color='tab:blue')
     
     plt.figtext(0.02, 0.033,'Spacecraft trajectories '+frame+' 2D projection', fontsize=fsize-1, ha='left',color=backcolor)
     
@@ -640,7 +849,10 @@ def make_frame(k):
     plt.figtext(0.02,0.01/2,r'Austrian Space Weather Office, GeoSphere Austria', fontsize=fsize-4, ha='left',color=backcolor) 
     plt.figtext(0.99,0.01/2,'helioforecast.space', fontsize=fsize-4, ha='right',color=backcolor) 
     
-    
+    logo = plt.imread('/perm/aswo/eweiler/ELEvo/logo/GSA_Basislogo_Positiv_RGB_XXS.png')
+    newax = fig.add_axes([0.91,0.91,0.08,0.08], anchor='NE', zorder=1)
+    newax.imshow(logo)
+    newax.axis('off') 
         
     categories = np.array([0, 2, 1, 1, 1, 2, 0, 0])
 
@@ -658,7 +870,7 @@ def make_frame(k):
             ax.plot(-theta+np.deg2rad(0+(360/24.47)*res_in_days*k+360/12*q), r, alpha=0.1, lw=0.5,color='grey',zorder=2)
 
     #save figure
-    framestr = '%05i' % (k)  
+    framestr = '%05i' % (k)
     filename=outputdirectory+'/pos_anim_'+framestr+'.jpg'  
     #if k==0: print(filename)
     plt.savefig(filename,dpi=200,facecolor=fig.get_facecolor(), edgecolor='none')
@@ -673,7 +885,7 @@ def make_frame(k):
     ########################################### loop end
 
 
-# In[12]:
+# In[33]:
 
 
 def make_frame2(k):
@@ -692,8 +904,6 @@ def make_frame2(k):
 
 
     frame_time_str=str(mdates.num2date(frame_time_num+k*res_in_days))
-    print( 'current frame_time_num', frame_time_str, '     ',k)
-    print('current frame_time_num in num:', frame_time_num+k*res_in_days)
     
     #these have their own times
     
@@ -725,7 +935,7 @@ def make_frame2(k):
 
 
     #plot stereoa fov hi1/2    
-    hp.plot_stereo_hi_fov(sta,frame_time_num, sta_timeind, ax,'A')
+    plot_stereo_hi_fov(sta,frame_time_num, sta_timeind, ax,'A')
 
 
 
@@ -775,11 +985,11 @@ def make_frame2(k):
 
     ######################## 1 plot all active CME circles
 
+    cmeind1=np.where(hc_time_num1 == frame_time_num+k*res_in_days)
+    
     plot_hi_geo=True    
     
     if plot_hi_geo:
-        
-        cmeind1=np.where(hc_time_num1 == frame_time_num+k*res_in_days)
 
         for p in range(0,np.size(cmeind1)):
             
@@ -830,8 +1040,8 @@ def make_frame2(k):
         nindex2=np.where(n_time_num > time_now+days_window)[0][0]
         #use last index   oindex2=np.size(o1)-1
         n=n1[nindex1:nindex2]
-        #if np.isnan(n.bt).all():
-         #   n.bt=np.nan
+        if np.isnan(n.bt).all():
+            n.bt=np.nan
     elif np.logical_and((n_time_num[-1] < time_now+days_window),(n_time_num[-1] > time_now-days_window)):
         nindex1=np.where(n_time_num > time_now-days_window)[0][0]
         nindex2=np.size(n1)-1
@@ -842,6 +1052,8 @@ def make_frame2(k):
         sindex1=np.where(s_time_num > time_now-days_window)[0][0]
         sindex2=np.where(s_time_num > time_now+days_window)[0][0]
         s=s1[sindex1:sindex2]
+        if np.isnan(s.bt).all():
+            s.bt=np.nan
     elif np.logical_and((s_time_num[-1] < time_now+days_window),(s_time_num[-1] > time_now-days_window)):
         sindex1=np.where(s_time_num > time_now-days_window)[0][0]
         sindex2=np.size(s1)-1
@@ -851,7 +1063,11 @@ def make_frame2(k):
     #---------------- NOAA mag
 
     ax4 = plt.subplot2grid((3,2), (0, 1))
-    ax4.plot_date([time_now,time_now], [-1000,1000],'-k', lw=0.5, alpha=0.8)
+    ax4.plot_date([time_now,time_now], [-1000,1000],'-k', lw=0.7, alpha=0.8)
+    ax4.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
+    ax4.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    ax4.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+
     ax4.set_xticklabels([])
     ax4.set_xlim(time_now-days_window,time_now+days_window)
     ax4.set_ylabel('B [nT] GSM',fontsize=fsize-1)
@@ -865,15 +1081,30 @@ def make_frame2(k):
         plt.plot_date(n.time,n.by,'-g',label='BT',linewidth=0.5)
         plt.plot_date(n.time,n.bz,'-b',label='BN',linewidth=0.5)
         plt.plot_date(n.time,n.bt,'-k',label='Btotal',lw=0.5)
-
+        
+        for i in range(len(hc_arr_time1)):
+            if np.isnan(hc_arr_hit1[i]) == False:       
+                ax4.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
+                ax4.annotate(hc_arr_id1[i][0:16], (hc_arr_time1[i], np.nanmax(n.bt)+5), fontsize=10, rotation=90)
+                
         if np.isfinite(np.nanmin(-n.bt)):         
             ax4.set_ylim(np.nanmin(-n.bt)-5, np.nanmax(n.bt)+5)
+       
+                
+
+
 
 
     #----------------  STEREO-A mag
     
     ax6 = plt.subplot2grid((3,2), (1, 1))
     ax6.plot_date([time_now,time_now], [-100,100],'-k', lw=0.5, alpha=0.8)
+    ax6.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
+    ax6.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    ax6.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    for i in range(len(hc_arr_time1)):
+        ax6.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
+        
     ax6.set_xlim(time_now-days_window,time_now+days_window)
     ax6.set_xticklabels([])
     ax6.set_ylabel('B [nT] GSM',fontsize=fsize-1)
@@ -888,16 +1119,21 @@ def make_frame2(k):
         plt.plot_date(s.time,s.bt,'-k',label='Btotal',linewidth=0.5)
     
         if np.isfinite(np.nanmin(-s.bt)):         
-            ax6.set_ylim(np.nanmin(-s.bt)-5, np.nanmax(s.bt)+5)
+            ax6.set_ylim(np.nanmin(-s.bt)-5, np.nanmax(s.bt)+5)  
         
-    
+        
     #----------------  STEREO, NOAA speed    
     
     ax5 = plt.subplot2grid((3,2), (2, 1))
     ax5.set_xlim(time_now-days_window,time_now+days_window)
     ax5.plot_date([time_now,time_now], [0,800],'-k', lw=0.5, alpha=0.8)
+    ax5.plot_date([hc_arr_time1,hc_arr_time1], [-1000,10000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
+    ax5.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,10000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    ax5.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,10000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    for i in range(len(hc_arr_time1)):
+        ax5.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
     plt.ylabel('V [km/s]',fontsize=fsize-1)
-    plt.ylim((240, 750))
+    #plt.ylim((240, 750))
     plt.yticks(fontsize=fsize-1)
     ax5.xaxis.set_major_formatter( matplotlib.dates.DateFormatter('%b-%d') )
     #ax5.set_xticklabels([])
@@ -905,33 +1141,40 @@ def make_frame2(k):
     if np.size(s)>0:
         plt.plot_date(s.time,s.vt,'-r',label='STEREO-A',linewidth=0.7)
     if np.size(n)>0:
-        plt.plot_date(n.time,n.vt,'-g',label='V',linewidth=0.7)   
+        plt.plot_date(n.time,n.vt,'-g',label='V',linewidth=0.7)  
+        ax5.set_ylim(200, np.nanmax(n.vt)+20)
+        
+    elif np.size(n) == 0:
+        ax5.set_ylim(200,750)
 
 
     plt.figtext(0.95,0.77,'NOAA', color='mediumseagreen', ha='center',fontsize=fsize+3)
     plt.figtext(0.95,0.49,'STEREO-A', color='red', ha='center',fontsize=fsize+3)
     plt.figtext(0.95,0.23,'NOAA', color='mediumseagreen', ha='center',fontsize=fsize+3)
     plt.figtext(0.95,0.18,'STEREO-A', color='red', ha='center',fontsize=fsize+3)
-    plt.figtext(0.92,0.93,r'B$_{\mathrm{x}}$', color='red', ha='center',fontsize=fsize)
-    plt.figtext(0.94,0.93,r'B$_{\mathrm{y}}$', color='green', ha='center',fontsize=fsize)
-    plt.figtext(0.96,0.93,r'B$_{\mathrm{z}}$', color='blue', ha='center',fontsize=fsize)
-    plt.figtext(0.98,0.93,r'B$_{\mathrm{tot}}$', color='black', ha='center',fontsize=fsize)
+    plt.figtext(0.92,0.91,r'B$_{\mathrm{x}}$', color='red', ha='center',fontsize=fsize)
+    plt.figtext(0.94,0.91,r'B$_{\mathrm{y}}$', color='green', ha='center',fontsize=fsize)
+    plt.figtext(0.96,0.91,r'B$_{\mathrm{z}}$', color='blue', ha='center',fontsize=fsize)
+    plt.figtext(0.98,0.91,r'B$_{\mathrm{tot}}$', color='black', ha='center',fontsize=fsize)
     
     ############################
 
     #plot text for date extra so it does not move 
+    f0=plt.figtext(0.207,0.93,str(mdates.num2date(frame_time_num+k*res_in_days).strftime('%A'))[0:3],  ha='left',color=backcolor,fontsize=fsize+6)
     #year
-    f1=plt.figtext(0.45,0.93,frame_time_str[0:4],  ha='center',color=backcolor,fontsize=fsize+6)
+    f1=plt.figtext(0.24,0.93,frame_time_str[0:4],  ha='left',color=backcolor,fontsize=fsize+6)
     #month
-    f2=plt.figtext(0.45+0.04,0.93,frame_time_str[5:7], ha='center',color=backcolor,fontsize=fsize+6)
+    f2=plt.figtext(0.24+0.04,0.93,frame_time_str[5:7], ha='left',color=backcolor,fontsize=fsize+6)
     #day
-    f3=plt.figtext(0.45+0.08,0.93,frame_time_str[8:10], ha='center',color=backcolor,fontsize=fsize+6)
+    f3=plt.figtext(0.245+0.06,0.93,frame_time_str[8:10], ha='left',color=backcolor,fontsize=fsize+6)
     #hours
-    f4=plt.figtext(0.45+0.12,0.93,frame_time_str[11:13], ha='center',color=backcolor,fontsize=fsize+6)
+    f4=plt.figtext(0.24+0.09,0.93,frame_time_str[11:13], ha='left',color=backcolor,fontsize=fsize+6)
     
-    f5=plt.figtext(0.45+0.16,0.93,'UTC', ha='center',color=backcolor,fontsize=fsize+6)
+    f5=plt.figtext(0.24+0.13,0.93,'UTC', ha='center',color=backcolor,fontsize=fsize+6)
     
-    plt.figtext(0.02, 0.08,'DONKI (CCMC) - kinematics: ELEvo', fontsize=fsize-1, ha='left',color='tab:blue')
+    plt.figtext(0.02, 0.08, 'created: '+ str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC', fontsize=fsize-3, ha='left', color=backcolor)
+    
+    plt.figtext(0.02, 0.1,'DONKI (CCMC) - kinematics: ELEvo', fontsize=fsize-1, ha='left',color='tab:blue')
     
     plt.figtext(0.02, 0.033,'Spacecraft trajectories '+frame+' 2D projection', fontsize=fsize-1, ha='left',color=backcolor)
     
@@ -950,7 +1193,10 @@ def make_frame2(k):
     plt.figtext(0.02,0.01/2,r'Austrian Space Weather Office, GeoSphere Austria', fontsize=fsize-4, ha='left',color=backcolor) 
     plt.figtext(0.99,0.01/2,'helioforecast.space', fontsize=fsize-4, ha='right',color=backcolor) 
     
-    
+    logo = plt.imread('/perm/aswo/eweiler/ELEvo/logo/GSA_Basislogo_Positiv_RGB_XXS.png')
+    newax = fig.add_axes([0.91,0.91,0.08,0.08], anchor='NE', zorder=1)
+    newax.imshow(logo)
+    newax.axis('off') 
         
     categories = np.array([0, 2, 1, 1, 1, 2, 0, 0])
 
@@ -966,6 +1212,16 @@ def make_frame2(k):
             r0=695000/AUkm
             r=v/omega*theta+r0*7
             ax.plot(-theta+np.deg2rad(0+(360/24.47)*res_in_days*k+360/12*q), r, alpha=0.1, lw=0.5,color='grey',zorder=2)
+            
+   
+    filename=animdirectory+'/current_image.jpg'  
+    #if k==0: print(filename)
+    plt.savefig(filename,dpi=200,facecolor=fig.get_facecolor(), edgecolor='none')
+    #plt.clf()
+    #if close==True: plt.close('all')
+
+
+    plt.close('all')
     #print(theta)        
    
     #save figure
@@ -978,7 +1234,7 @@ def make_frame2(k):
     ########################################### loop end
 
 
-# In[13]:
+# In[34]:
 
 
 def make_frame3(k):
@@ -1124,20 +1380,24 @@ def make_frame3(k):
 
 
     #plot text for date extra so it does not move 
+    #weekday
+    f0=plt.figtext(0.465-0.06,0.93, str(today.strftime('%A'))[0:3], ha='center', color=backcolor,fontsize=fsize+6)
     #year
-    f1=plt.figtext(0.465-0.02,0.93,frame_time_str[0:4],  ha='center',color=backcolor,fontsize=fsize+6)
+    f1=plt.figtext(0.465-0.01,0.93,frame_time_str[0:4],  ha='center',color=backcolor,fontsize=fsize+6)
     #month
-    f2=plt.figtext(0.465+0.02,0.93,frame_time_str[5:7], ha='center',color=backcolor,fontsize=fsize+6)
+    f2=plt.figtext(0.465+0.03,0.93,frame_time_str[5:7], ha='center',color=backcolor,fontsize=fsize+6)
     #day
-    f3=plt.figtext(0.465+0.05,0.93,frame_time_str[8:10], ha='center',color=backcolor,fontsize=fsize+6)
+    f3=plt.figtext(0.465+0.06,0.93,frame_time_str[8:10], ha='center',color=backcolor,fontsize=fsize+6)
     #hours
-    f4=plt.figtext(0.45+0.105,0.93,frame_time_str[11:13], ha='center',color=backcolor,fontsize=fsize+6)
+    f4=plt.figtext(0.45+0.106,0.93,frame_time_str[11:13], ha='center',color=backcolor,fontsize=fsize+6)
     
     #f5=plt.figtext(0.45+0.13,0.93,frame_time_str[14:16], ha='center',color=backcolor,fontsize=fsize+6)
     
     f5=plt.figtext(0.45+0.14,0.93,'UTC', ha='center',color=backcolor,fontsize=fsize+6)
     
-    #plt.figtext(0.02, 0.12,'DONKI (CCMC) - kinematics: ELEvo', fontsize=fsize-1, ha='left',color='tab:blue')
+    plt.figtext(0.02, 0.12, 'created: '+ str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC', fontsize=fsize-3, ha='left', color=backcolor)
+    
+    plt.figtext(0.02, 0.14,'DONKI (CCMC) - kinematics: ELEvo', fontsize=fsize-1, ha='left',color='tab:blue')
     
     plt.figtext(0.02, 0.08,'Spacecraft trajectories '+frame+' 2D projection', fontsize=fsize-1, ha='left',color=backcolor)
     
@@ -1156,6 +1416,10 @@ def make_frame3(k):
     plt.figtext(0.02,0.01/2,r'Austrian Space Weather Office, GeoSphere Austria', fontsize=fsize-4, ha='left',color=backcolor) 
     plt.figtext(0.99,0.01/2,'helioforecast.space', fontsize=fsize-4, ha='right',color=backcolor) 
     
+    logo = plt.imread('/perm/aswo/eweiler/ELEvo/logo/GSA_Basislogo_Positiv_RGB_XXS.png')
+    newax = fig.add_axes([0.90,0.90,0.08,0.08], anchor='NE', zorder=1)
+    newax.imshow(logo)
+    newax.axis('off')        
         
     categories = np.array([0, 2, 1, 1, 1, 2, 0, 0])
 
@@ -1298,7 +1562,7 @@ print('done')
 
 # ## plot and save overview with current date
 
-# In[16]:
+# In[30]:
 
 
 #for server
@@ -1306,7 +1570,7 @@ print('done')
 
 print('Save kinematics plots and overview plot for current time')
 
-#get_ipython().run_line_magic('matplotlib', 'inline')
+#%matplotlib inline
 
 start_time=time.time()
 
@@ -1347,10 +1611,10 @@ theta=np.arange(0,np.deg2rad(180),0.01)
 
 plot_kinematics(hc_time_num1, hc_r1, hc_v1)
 ####################### plot and save frame with todays date and hour 
-make_frame3(k_today[0][0]) 
+make_frame2(k_today[0][0]) 
 
 ####################### test animation frames (different frame numbers)
-#make_frame2(k_today[0][0])
+#make_frame2(80)#k_today[0][0])
 
 #for i in np.arange(1,3,1):
 #    make_frame(i)
@@ -1360,8 +1624,7 @@ print('done')
 
 # ## Make full movie
 
-# In[17]:
-
+# In[40]:
 
 matplotlib.use('Agg')
 
@@ -1379,7 +1642,7 @@ print('Using multiprocessing, nr of cores',multiprocessing.cpu_count(), \
 
 #run multiprocessing pool to make all movie frames, depending only on frame number
 
-pool=mp.get_context('fork').Pool(processes=used)
+pool=mp.get_context('fork').Pool(processes=nr_of_processes_used)
 
 #pool = mp.Pool(processes=nr_of_processes_used)
 #input=[i for i in range(k_all)]
@@ -1394,18 +1657,18 @@ print('time in min: ',np.round((time.time()-start_time)/60))
 print('plots done, frames saved in ',outputdirectory)
 
 
-# In[18]:
+# In[41]:
 
 
 date_today = datetime.now().strftime('%Y-%m-%d')
 
-os.system(ffmpeg_path+'ffmpeg -r 90 -i '+str(outputdirectory)+'/pos_anim_%05d.jpg -b 5000k \
-    -r 90 '+str(animdirectory)+'all_movies/elevo_'+date_today+'.mp4 -y -loglevel warning') 
+os.system(ffmpeg_path+'ffmpeg -r 40 -i '+str(outputdirectory)+'/pos_anim_%05d.jpg -b 5000k \
+    -r 40 '+str(animdirectory)+'all_movies/elevo_'+date_today+'.mp4 -y -loglevel warning') 
 
 print('movie done, saved in ',animdirectory+'all_movies')
 
 
-# In[19]:
+# In[42]:
 
 
 copyfile = os.path.join(animdirectory, 'all_movies/elevo_'+date_today+'.mp4')
@@ -1413,14 +1676,77 @@ shutil.copy(copyfile,animdirectory)
 
 os.rename(os.path.join(animdirectory, 'elevo_'+date_today+'.mp4'), os.path.join(animdirectory, 'elevo.mp4'))
                                                                                 
-copyfile1 = os.path.join(arr_outputdirectory, 'icme_arrival_'+date_today_hours+'.txt')
-shutil.copy(copyfile1,animdirectory)
+#copyfile1 = os.path.join(arr_outputdirectory, 'icme_arrival_'+date_today_hours+'.txt')
+#shutil.copy(copyfile1,animdirectory)
 
-os.rename(os.path.join(animdirectory, 'icme_arrival_'+date_today_hours+'.txt'), os.path.join(animdirectory, 'elevo_arrival_times.txt'))                                                                                
+#os.rename(os.path.join(animdirectory, 'icme_arrival_'+date_today_hours+'.txt'), os.path.join(animdirectory, 'elevo_arrival_times.txt'))                                                                                
+
+#copyfile2 = os.path.join(arr_outputdirectory, 'icme_arrival_solo_'+date_today_hours+'.txt')
+#shutil.copy(copyfile2,animdirectory)
+
+#os.rename(os.path.join(animdirectory, 'icme_arrival_solo_'+date_today_hours+'.txt'), os.path.join(animdirectory, 'elevo_arrival_times_solo.txt'))  
+
+os.system('sort -n ' + arr_outputdirectory + '/icme_arrival_'+date_today_hours+'.txt > ' + movie_path + 'elevo_arrival_times.txt')
+os.system('sort -n ' + arr_outputdirectory + '/icme_arrival_solo_'+date_today_hours+'.txt > ' + movie_path + 'elevo_arrival_times_solo.txt')
+
+fin = pd.read_csv(movie_path+'elevo_arrival_times.txt', skiprows=2, names=['ID', 'time 21.5 [UT, at 21.5 R_Sun]', 'lon [deg]', 'lat [deg]', 'initial speed [km/s]', 'arrival time [UTC]', 'error arrival time [h]', 'arrival speed [km/s]', 'error arrival speed [km/s]'], delimiter=' ')
+
+
+fin_solo = pd.read_csv(movie_path+'elevo_arrival_times_solo.txt', skiprows=2, names=['ID', 'time 21.5 [UT, at 21.5 R_Sun]', 'lon [deg]', 'lat [deg]', 'initial speed [km/s]', 'arrival time [UTC]', 'error arrival time [h]', 'arrival speed [km/s]', 'error arrival speed [km/s]'], delimiter=' ')
+
+
+fin['error arrival time [h]'] = '± '+fin['error arrival time [h]'].astype(str)
+fin['error arrival speed [km/s]'] = '± '+fin['error arrival speed [km/s]'].astype(str)
+
+fin_solo['error arrival time [h]'] = '± '+fin_solo['error arrival time [h]'].astype(str) 
+fin_solo['error arrival speed [km/s]'] = '± '+fin_solo['error arrival speed [km/s]'].astype(str)
+
+
+header='ELEvo CME arrival times at Earth, Austrian Space Weather Office / GeoSphere Austria, created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n'
+header_solo='ELEvo CME arrival times at Solar Orbiter, Austrian Space Weather Office / GeoSphere Austria, created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n'
+
+file=movie_path+'ELEvo_header.txt'
+with open(file, "w") as text_file:
+    text_file.write(header)
+    #text_file.write(parameters) 
+print('header saved as '+file)
+   
+#Convert to html regarding line breaks, paragraph beginning and spaces
+header_spaces=header.replace(" ", "&nbsp;")
+header_html= "<p>" +header_spaces.replace('\n', '<br>')+ "</p>" 
+print('header converted to HTML')
+
+
+file_solo_header=movie_path+'ELEvo_header_solo.txt'
+with open(file_solo_header, "w") as text_file:
+    text_file.write(header_solo)
+    #text_file.write(parameters) 
+print('header saved as '+file)
+   
+
+#Convert to html regarding line breaks, paragraph beginning and spaces
+header_spaces_solo=header_solo.replace(" ", "&nbsp;")
+header_html_solo= "<p>" +header_spaces_solo.replace('\n', '<br>')+ "</p>" 
+print('header converted to HTML')
+
+dfhtml = header_html
+dfhtml += fin.to_html()
+
+file_earth = movie_path+'elevo_arrival_times.html'
+with open(file_earth,'w') as f:
+    f.write(dfhtml)
+    f.close()
+
+
+dfhtml_solo = header_html_solo
+dfhtml_solo += fin_solo.to_html()
+
+file_solo = movie_path+'elevo_arrival_times_solo.html'
+with open(file_solo,'w') as f:
+    f.write(dfhtml_solo)
+    f.close()
 
 
 # In[ ]:
-
-
 
 

@@ -27,6 +27,7 @@ ffmpeg_path=''
 import os
 import datetime
 from datetime import datetime, timedelta
+from scipy.stats import norm
 from sunpy.time import parse_time
 import sunpy
 import astropy.units as u
@@ -181,16 +182,27 @@ def plot_stereo_hi_fov(pos, time_num, timeind,ax,sc):
     [r5,t5,lon5]=cart2sphere(x5f,y5f,z5f)    
     
     #ax.plot([lon0,lon1],[r0,r1],'--r',alpha=0.5)
-    ax.plot([lon0,lon2],[r0,r2],linestyle='-',color=lcolor,alpha=0.3)
-    ax.plot([lon0,lon3],[r0,r3],linestyle='-',color=lcolor,alpha=0.3)
-    ax.plot([lon0,lon4],[r0,r4],linestyle='--',color=lcolor,alpha=0.3)
-    ax.plot([lon0,lon5],[r0,r5],linestyle='--',color=lcolor,alpha=0.3)
+    ax.plot([lon0,lon2],[r0,r2],linestyle='-',color=lcolor,alpha=0.3, lw=0.8)
+    ax.plot([lon0,lon3],[r0,r3],linestyle='-',color=lcolor,alpha=0.3, lw=0.8)
+    ax.plot([lon0,lon4],[r0,r4],linestyle='--',color=lcolor,alpha=0.3, lw=0.8)
+    ax.plot([lon0,lon5],[r0,r5],linestyle='--',color=lcolor,alpha=0.3, lw=0.8)
 
 
 print('load positions')   
 
 #positions needed for arrival time/speed calculation and plotting below
-[psp, solo, sta, stereob_recon, bepi, wind, earth, mercury, venus, mars, jupiter, saturn, uranus, neptune]=pickle.load( open( data_path+'positions_psp_solo_sta_bepi_wind_planets_HEEQ_10min_rad.p', "rb" ) )
+#old file: [psp, solo, sta, stereob_recon, bepi, wind, earth, mercury, venus, mars, jupiter, saturn, uranus, neptune]=pickle.load( open( data_path+'positions_psp_solo_sta_bepi_wind_planets_HEEQ_10min_rad.p', "rb" ) )
+
+pos = pickle.load(open(data_path+'positions_from_2010_to_2030_HEEQ_10min_rad_ed.p',"rb"))
+psp = pos['psp']
+solo = pos['solo']
+sta = pos['sta']
+earth = pos['l1'] #earth is l1!
+wind = pos['l1']
+bepi = pos['bepi']
+mercury = pos['mercury']
+venus = pos['venus']
+mars = pos['mars']
 
 print('done')
 
@@ -210,14 +222,20 @@ if os.path.isdir(arr_outputdirectory) == False: os.mkdir(arr_outputdirectory)
 date_today_hours = datetime.now().strftime('%Y-%m-%d_%H')
 date_today_minutes = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-header = r'ID, time 21.5 [UT, at 21.5 R_Sun], lon [deg], lat [deg], initial speed [km/s], arrival time [UTC], error arrival time [h], arrival speed [km/s], error arrival speed [km/s]'
+header = r'ID, time 21.5 [UT, at 21.5 R_Sun], lon [deg], lat [deg], half width [deg], initial speed [km/s], arrival time [UTC], error arrival time [h], arrival speed [km/s], error arrival speed [km/s]'
 with open(arr_outputdirectory+'/icme_arrival_'+date_today_hours+'.txt', "a") as f:
     f.write('ASWO, GeoSphere Austria - created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n')
     f.write(header + '\n')
     f.close
     
-header = r'ID, time 21.5 [UT, at 21.5 R_Sun], lon [deg], lat [deg], initial speed [km/s], arrival time @SolarOrbiter [UTC], error arrival time [h], arrival speed @SolarOrbiter [km/s], error arrival speed [km/s]'
+header = r'ID, time 21.5 [UT, at 21.5 R_Sun], lon [deg], lat [deg], half width [deg], initial speed [km/s], arrival time @SolarOrbiter [UTC], error arrival time [h], arrival speed @SolarOrbiter [km/s], error arrival speed [km/s]'
 with open(arr_outputdirectory+'/icme_arrival_solo_'+date_today_hours+'.txt', "a") as f:
+    f.write('ASWO, GeoSphere Austria - created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n')
+    f.write(header + '\n')
+    f.close
+    
+header = r'ID, time 21.5 [UT, at 21.5 R_Sun], lon [deg], lat [deg], initial speed [km/s], arrival time [UT], error arrival time @STEREO-A [h], arrival speed @STEREO-A [km/s], error arrival speed [km/s]'
+with open(arr_outputdirectory+'/icme_arrival_sta_'+date_today_hours+'.txt', "a") as f:
     f.write('ASWO, GeoSphere Austria - created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n')
     f.write(header + '\n')
     f.close
@@ -227,7 +245,7 @@ with open(arr_outputdirectory+'/icme_arrival_solo_'+date_today_hours+'.txt', "a"
 
 date=(datetime.now()-timedelta(days=14)).strftime('%Y-%m-%d')
 
-url_donki='https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/CMEAnalysis?startDate='+date
+url_donki='https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/CMEAnalysis?startDate='+date+'&mostAccurateOnly=true'
 try: urllib.request.urlretrieve(url_donki,results_path+'DONKI.json')
 except urllib.error.URLError as e:
     print('DONKI not loaded')
@@ -385,6 +403,8 @@ def donki_kinematics(i):
     arr_time_err1 = []
     arr_id = []
     arr_hit = []
+    arr_speed_list = []
+    arr_speed_err_list = []
     if np.isnan(distance_earth).all() == False:
 
         for t in range(3):
@@ -394,12 +414,15 @@ def donki_kinematics(i):
         arr_speed = cme_v[:,0][index]
         err_arr_speed = cme_v[:,2][index]-cme_v[:,1][index]
         err_arr_time = (arr_time[1]-arr_time[2]).total_seconds()/3600.   
-        arrival.append([cme_id[0].decode("utf-8"), t0[i].strftime('%Y-%m-%dT%H:%MZ'), "{:.1f}".format(cme_lon[0]), "{:.1f}".format(cme_lat[0]), "{:.1f}".format(data.speed[i]), arr_time[0].strftime('%Y-%m-%dT%H:%MZ'), "{:.2f}".format(err_arr_time/2), "{:.2f}".format(arr_speed), "{:.2f}".format(err_arr_speed/2)])   
+        arrival.append([cme_id[0].decode("utf-8"), t0[i].strftime('%Y-%m-%dT%H:%MZ'), "{:.1f}".format(cme_lon[0]), "{:.1f}".format(cme_lat[0]), "{:.1f}".format(data.halfAngle[i]), "{:.1f}".format(data.speed[i]), arr_time[0].strftime('%Y-%m-%dT%H:%MZ'), "{:.2f}".format(err_arr_time/2), "{:.2f}".format(arr_speed), "{:.2f}".format(err_arr_speed/2)])   
         arr_time_fin.append(arr_time[0])
         arr_time_err0.append(arr_time[0]-timedelta(hours=err_arr_time))
         arr_time_err1.append(arr_time[0]+timedelta(hours=err_arr_time))
         arr_id.append(cme_id[0].decode("utf-8"))
         arr_hit.append(1.)
+        arr_speed_list.append(arr_speed)
+        arr_speed_err_list.append(err_arr_speed/2)
+
         
     else:
         arr_time_fin.append(np.nan)
@@ -407,6 +430,8 @@ def donki_kinematics(i):
         arr_time_err1.append(np.nan)
         arr_id.append(np.nan)
         arr_hit.append(np.nan)
+        arr_speed_list.append(np.nan)
+        arr_speed_err_list.append(np.nan)
 
         
     arr_time_solo = []
@@ -420,7 +445,7 @@ def donki_kinematics(i):
         arr_speed_solo = cme_v[:,0][index_solo]
         err_arr_speed_solo = cme_v[:,2][index_solo]-cme_v[:,1][index_solo]
         err_arr_time_solo = (arr_time_solo[1]-arr_time_solo[2]).total_seconds()/3600.   
-        arrival_solo.append([cme_id[0].decode("utf-8"), t0[i].strftime('%Y-%m-%dT%H:%MZ'), "{:.1f}".format(cme_lon[0]), "{:.1f}".format(cme_lat[0]), "{:.1f}".format(data.speed[i]), arr_time_solo[0].strftime('%Y-%m-%dT%H:%MZ'), "{:.2f}".format(err_arr_time_solo/2), "{:.2f}".format(arr_speed_solo), "{:.2f}".format(err_arr_speed_solo/2)])           
+        arrival_solo.append([cme_id[0].decode("utf-8"), t0[i].strftime('%Y-%m-%dT%H:%MZ'), "{:.1f}".format(cme_lon[0]), "{:.1f}".format(cme_lat[0]), "{:.1f}".format(data.halfAngle[i]), "{:.1f}".format(data.speed[i]), arr_time_solo[0].strftime('%Y-%m-%dT%H:%MZ'), "{:.2f}".format(err_arr_time_solo/2), "{:.2f}".format(arr_speed_solo), "{:.2f}".format(err_arr_speed_solo/2)])           
     
     #linear interpolation to time_mat times    
     cme_r = [np.interp(time2_num, time1_num,cme_r[:,i]) for i in range(3)]
@@ -439,9 +464,262 @@ def donki_kinematics(i):
     with open(arr_outputdirectory+'/icme_arrival_solo_'+date_today_hours+'.txt', "ab") as f:
         np.savetxt(f, arrival_solo, newline='\n', fmt='%s')
     
-    return time2_num, cme_r, cme_lat, cme_lon, cme_a, cme_b, cme_c, cme_id, cme_v, arr_time_fin, arr_time_err0, arr_time_err1, arr_id, arr_hit
+    return time2_num, cme_r, cme_lat, cme_lon, cme_a, cme_b, cme_c, cme_id, cme_v, arr_time_fin, arr_time_err0, arr_time_err1, arr_id, arr_hit, arr_speed_list, arr_speed_err_list
 
 #print('done')
+
+def donki_kinematics_new(i):
+    print(f'Processing CME {i+1}')
+    
+    distance0 = 21.5*u.solRad.to(u.km)
+    t0_num = data.time21_5
+    t0 = mdates.num2date(t0_num)
+    gamma_init = 0.1
+    ambient_wind_init = 400.
+    kindays = 15
+    n_ensemble = 50000
+    halfwidth = np.deg2rad(data.halfAngle[i])
+    res_in_min = 10
+    f = 0.7
+    kindays_in_min = int(kindays*24*60/res_in_min)
+    
+    #for sc in ['earth', 'solo']:
+    
+    dct = t0_num[i]-earth.time
+    earth_ind = np.argmin(np.abs(dct))
+
+    if np.abs(np.deg2rad(data.longitude[i])) + np.abs(earth.lon[earth_ind]) > np.pi and np.sign(np.deg2rad(data.longitude[i])) != np.sign(earth.lon[earth_ind]):
+        delta_earth = np.deg2rad(data.longitude[i]) - (earth.lon[earth_ind] + 2 * np.pi * np.sign(np.deg2rad(data.longitude[i])))
+
+    else:
+        delta_earth = np.deg2rad(data.longitude[i]) - earth.lon[earth_ind]
+        
+        
+    dct = t0_num[i]-solo.time
+    solo_ind = np.argmin(np.abs(dct))
+    
+    t0_num_kindays = mdates.date2num(mdates.num2date(t0_num[i])+timedelta(days=kindays))
+    dct2 = t0_num_kindays-solo.time
+    solo_ind2 = np.argmin(np.abs(dct2))
+    
+    delta_solo_list = []
+    for j in range(kindays_in_min):
+        if np.abs(np.deg2rad(data.longitude[i])) + np.abs(solo.lon[solo_ind+j:solo_ind+(j+1)]) > np.pi and np.sign(np.deg2rad(data.longitude[i])) != np.sign(solo.lon[solo_ind+j:solo_ind+(j+1)]):
+            delta_solo = (np.deg2rad(data.longitude[i]) - (solo.lon[solo_ind+j:solo_ind+(j+1)] + 2 * np.pi * np.sign(np.deg2rad(data.longitude[i]))))[0]
+
+        else:
+            delta_solo = (np.deg2rad(data.longitude[i]) - solo.lon[solo_ind+j:solo_ind+(j+1)])[0]
+            
+        delta_solo_list.append(delta_solo)
+        
+        
+    dct = t0_num[i]-sta.time
+    sta_ind = np.argmin(np.abs(dct))
+    
+    t0_num_kindays = mdates.date2num(mdates.num2date(t0_num[i])+timedelta(days=kindays))
+    dct2 = t0_num_kindays-sta.time
+    sta_ind2 = np.argmin(np.abs(dct2))
+    
+    delta_sta_list = []
+    for j in range(kindays_in_min):
+        if np.abs(np.deg2rad(data.longitude[i])) + np.abs(sta.lon[sta_ind+j:sta_ind+(j+1)]) > np.pi and np.sign(np.deg2rad(data.longitude[i])) != np.sign(sta.lon[sta_ind+j:sta_ind+(j+1)]):
+            delta_sta = (np.deg2rad(data.longitude[i]) - (sta.lon[sta_ind+j:sta_ind+(j+1)] + 2 * np.pi * np.sign(np.deg2rad(data.longitude[i]))))[0]
+
+        else:
+            delta_sta = (np.deg2rad(data.longitude[i]) - sta.lon[sta_ind+j:sta_ind+(j+1)])[0]
+            
+        delta_sta_list.append(delta_sta)
+
+        
+    #times for each event kinematic
+    time1=[]
+    tstart1=copy.deepcopy(t0[i])
+    tend1=tstart1+timedelta(days=kindays)
+    #make 30 min datetimes
+    while tstart1 < tend1:
+
+        time1.append(tstart1)  
+        tstart1 += timedelta(minutes=res_in_min)    
+
+    #make kinematics
+    
+    timestep=np.zeros([kindays_in_min,n_ensemble])
+    cme_r=np.zeros([kindays_in_min, 3])
+    cme_v=np.zeros([kindays_in_min, 3])
+    cme_lon=np.ones(kindays_in_min)*data.longitude[i]
+    cme_lat=np.ones(kindays_in_min)*data.latitude[i]
+    cme_id=np.chararray(kindays_in_min, itemsize=27)
+    cme_id[:]=data.associatedCMEID[i]
+    cme_r_ensemble=np.zeros([kindays_in_min, n_ensemble])
+    cme_v_ensemble=np.zeros([kindays_in_min, n_ensemble])
+    cme_delta=delta_earth*np.ones([kindays_in_min,3])
+    cme_delta_solo = [[x] * 3 for x in delta_solo_list]
+    cme_delta_sta = [[x] * 3 for x in delta_sta_list]
+    cme_hit=np.zeros(kindays_in_min)
+    cme_hit[np.abs(delta_earth)<halfwidth] = 1
+    cme_hit_solo=np.zeros(kindays_in_min)
+    cme_hit_solo[np.abs(delta_solo_list[0])<halfwidth] = 1
+    cme_hit_sta=np.zeros(kindays_in_min)
+    cme_hit_sta[np.abs(delta_sta_list[0])<halfwidth] = 1
+    distance_earth = np.empty([kindays_in_min,3])
+    distance_solo = np.empty([kindays_in_min,3])
+    distance_sta = np.empty([kindays_in_min,3])
+    distance_earth[:] = np.nan
+    distance_solo[:] = np.nan
+    distance_sta[:] = np.nan
+        
+    kindays_in_min = int(kindays*24*60/res_in_min)
+    
+    gamma = np.abs(np.random.normal(gamma_init,0.025,n_ensemble))
+    ambient_wind = np.random.normal(ambient_wind_init,50,n_ensemble)
+    speed = np.random.normal(data.speed[i],50,n_ensemble)
+    
+    timesteps = np.arange(kindays_in_min)*res_in_min*60
+    timesteps = np.vstack([timesteps]*n_ensemble)
+    timesteps = np.transpose(timesteps)
+
+    accsign = np.ones(n_ensemble)
+    accsign[speed < ambient_wind] = -1.
+
+    distance0_list = np.ones(n_ensemble)*distance0
+    
+    cme_r_ensemble = (accsign / (gamma * 1e-7)) * np.log(1 + (accsign * (gamma * 1e-7) * ((speed - ambient_wind) * timesteps))) + ambient_wind * timesteps + distance0_list
+    cme_v_ensemble = (speed - ambient_wind) / (1 + (accsign * (gamma * 1e-7) * (speed - ambient_wind) * timesteps)) + ambient_wind
+
+    cme_r_mean = cme_r_ensemble.mean(1)
+    cme_r_std = cme_r_ensemble.std(1)
+    cme_v_mean = cme_v_ensemble.mean(1)
+    cme_v_std = cme_v_ensemble.std(1)
+    cme_r[:,0]= cme_r_mean*u.km.to(u.au)
+    cme_r[:,1]=(cme_r_mean - 2*cme_r_std)*u.km.to(u.au) 
+    cme_r[:,2]=(cme_r_mean + 2*cme_r_std)*u.km.to(u.au)
+    cme_v[:,0]= cme_v_mean
+    cme_v[:,1]=(cme_v_mean - 2*cme_v_std)
+    cme_v[:,2]=(cme_v_mean + 2*cme_v_std)
+    
+    #Ellipse parameters   
+    theta = np.arctan(f**2*np.ones([kindays_in_min,3]) * np.tan(halfwidth*np.ones([kindays_in_min,3])))
+    omega = np.sqrt(np.cos(theta)**2 * (f**2*np.ones([kindays_in_min,3]) - 1) + 1)   
+    cme_b = cme_r * omega * np.sin(halfwidth*np.ones([kindays_in_min,3])) / (np.cos(halfwidth*np.ones([kindays_in_min,3]) - theta) + omega * np.sin(halfwidth*np.ones([kindays_in_min,3])))    
+    cme_a = cme_b / f*np.ones([kindays_in_min,3])
+    cme_c = cme_r - cme_b
+        
+    root = np.sin(cme_delta)**2 * f**2*np.ones([kindays_in_min,3]) * (cme_b**2 - cme_c**2) + np.cos(cme_delta)**2 * cme_b**2
+    distance_earth[cme_hit.all() == 1] = (cme_c * np.cos(cme_delta) + np.sqrt(root)) / (np.sin(cme_delta)**2 * f**2*np.ones([kindays_in_min,3]) + np.cos(cme_delta)**2) #distance from SUN in AU for given point on ellipse
+    
+    root_solo = np.sin(cme_delta_solo)**2 * f**2*np.ones([kindays_in_min,3]) * (cme_b**2 - cme_c**2) + np.cos(cme_delta_solo)**2 * cme_b**2
+    distance_solo[cme_hit_solo.all() == 1] = (cme_c * np.cos(cme_delta_solo) + np.sqrt(root_solo)) / (np.sin(cme_delta_solo)**2 * f**2*np.ones([kindays_in_min,3]) + np.cos(cme_delta_solo)**2) 
+    
+    root_sta = np.sin(cme_delta_sta)**2 * f**2*np.ones([kindays_in_min,3]) * (cme_b**2 - cme_c**2) + np.cos(cme_delta_sta)**2 * cme_b**2
+    distance_sta[cme_hit_sta.all() == 1] = (cme_c * np.cos(cme_delta_sta) + np.sqrt(root_sta)) / (np.sin(cme_delta_sta)**2 * f**2*np.ones([kindays_in_min,3]) + np.cos(cme_delta_sta)**2) 
+        
+    #### linear interpolate to 10 min resolution
+
+    #find next full hour after t0
+    format_str = '%Y-%m-%d %H'  
+    t0r = datetime.strptime(datetime.strftime(t0[i], format_str), format_str) +timedelta(hours=1)
+    time2=[]
+    tstart2=copy.deepcopy(t0r)
+    tend2=tstart2+timedelta(days=kindays)
+    #make 30 min datetimes 
+    while tstart2 < tend2:
+        time2.append(tstart2)  
+        tstart2 += timedelta(minutes=res_in_min)  
+
+    time2_num=parse_time(time2).plot_date        
+    time1_num=parse_time(time1).plot_date
+    
+
+    def process_arrival(distance, obj, time1, cme_v, cme_id, t0, i, cme_lon, cme_lat, data, label):
+        arr_time = []
+        arrival = []
+        arr_time_fin = []
+        arr_time_err0 = []
+        arr_time_err1 = []
+        arr_id = []
+        arr_hit = []
+        arr_speed_list = []
+        arr_speed_err_list = []
+
+        if not np.isnan(distance).all():
+            if label == 'earth':
+                for t in range(3):
+                    index = np.argmin(np.abs(np.ma.array(distance[:, t], mask=np.isnan(distance[:, t])) - obj))
+                    arr_time.append(time1[int(index)])
+
+            else:
+                for t in range(3):
+                    index = np.argmin(np.abs(distance[:,t] - obj))
+                    arr_time.append(time1[int(index)])
+
+            arr_speed = cme_v[:, 0][index]
+            err_arr_speed = cme_v[:, 2][index] - cme_v[:, 1][index]
+            err_arr_time = (arr_time[1] - arr_time[2]).total_seconds() / 3600.0
+            arrival.append([
+                cme_id[0].decode("utf-8"),
+                t0[i].strftime('%Y-%m-%dT%H:%MZ'),
+                "{:.1f}".format(cme_lon[0]),
+                "{:.1f}".format(cme_lat[0]),
+                "{:.1f}".format(data.halfAngle[i]),
+                "{:.1f}".format(data.speed[i]),
+                arr_time[0].strftime('%Y-%m-%dT%H:%MZ'),
+                "{:.2f}".format(err_arr_time / 2),
+                "{:.2f}".format(arr_speed),
+                "{:.2f}".format(err_arr_speed / 2)
+            ])
+            arr_time_fin.append(arr_time[0])
+            arr_time_err0.append(arr_time[0] - timedelta(hours=err_arr_time))
+            arr_time_err1.append(arr_time[0] + timedelta(hours=err_arr_time))
+            arr_id.append(cme_id[0].decode("utf-8"))
+            arr_hit.append(1.0)
+            arr_speed_list.append(arr_speed)
+            arr_speed_err_list.append(err_arr_speed / 2)
+        
+        else:
+            arr_time_fin.append(np.nan)
+            arr_time_err0.append(np.nan)
+            arr_time_err1.append(np.nan)
+            arr_id.append(np.nan)
+            arr_hit.append(np.nan)
+            arr_speed_list.append(np.nan)
+            arr_speed_err_list.append(np.nan)
+
+
+        return {
+            f"arrival": arrival,
+            f"arr_time_fin": arr_time_fin,
+            f"arr_time_err0": arr_time_err0,
+            f"arr_time_err1": arr_time_err1,
+            f"arr_id": arr_id,
+            f"arr_hit": arr_hit,
+            f"arr_speed_list": arr_speed_list,
+            f"arr_speed_err_list": arr_speed_err_list,
+        }
+    
+
+    results_earth = process_arrival(distance_earth, earth.r[earth_ind], time1, cme_v, cme_id, t0, i, cme_lon, cme_lat, data, label="earth")
+    results_solo = process_arrival(distance_solo, solo.r[solo_ind:solo_ind2], time1, cme_v, cme_id, t0, i, cme_lon, cme_lat, data, label="solo")
+    results_sta = process_arrival(distance_sta, sta.r[sta_ind:sta_ind2], time1, cme_v, cme_id, t0, i, cme_lon, cme_lat, data, label="sta")
+    
+    #linear interpolation to time_mat times    
+    cme_r = [np.interp(time2_num, time1_num,cme_r[:,i]) for i in range(3)]
+    cme_v = [np.interp(time2_num, time1_num,cme_v[:,i]) for i in range(3)]
+    cme_lat = np.interp(time2_num, time1_num,cme_lat )
+    cme_lon = np.interp(time2_num, time1_num,cme_lon )
+    cme_a = [np.interp(time2_num, time1_num,cme_a[:,i]) for i in range(3)]
+    cme_b = [np.interp(time2_num, time1_num,cme_b[:,i]) for i in range(3)]
+    cme_c = [np.interp(time2_num, time1_num,cme_c[:,i]) for i in range(3)]
+    
+    with open(arr_outputdirectory+'/icme_arrival_'+date_today_hours+'.txt', "ab") as f:
+        np.savetxt(f, results_earth['arrival'], newline='\n', fmt='%s')
+        
+    with open(arr_outputdirectory+'/icme_arrival_solo_'+date_today_hours+'.txt', "ab") as f:
+        np.savetxt(f, results_solo['arrival'], newline='\n', fmt='%s')
+        
+    with open(arr_outputdirectory+'/icme_arrival_sta_'+date_today_hours+'.txt', "ab") as f:
+        np.savetxt(f, results_sta['arrival'], newline='\n', fmt='%s')
+    
+    return time2_num, cme_r, cme_lat, cme_lon, cme_a, cme_b, cme_c, cme_id, cme_v, results_earth['arr_time_fin'], results_earth['arr_time_err0'], results_earth['arr_time_err1'], results_earth['arr_id'], results_earth['arr_hit'], results_earth['arr_speed_list'], results_earth['arr_speed_err_list'], results_sta['arr_time_fin']
 
 
 # In[8]:
@@ -459,7 +737,7 @@ else:
 print('Using multiprocessing, nr of cores',mp.cpu_count(),', nr of processes used: ',used)
 pool=mp.get_context('fork').Pool(processes=used)
 
-results = pool.map(donki_kinematics, range(len(data)))
+results = pool.map(donki_kinematics_new, range(len(data)))
 
 pool.close()
 pool.join() 
@@ -512,7 +790,16 @@ hc_arr_id1 = np.concatenate(hc_arr_id)
 hc_arr_hit = [result[13] for result in results]
 hc_arr_hit1 = np.concatenate(hc_arr_hit)
 
-pickle.dump([hc_time_num1, hc_r1, hc_lat1, hc_lon1, hc_id1, a1_ell, b1_ell, c1_ell, hc_arr_time1, hc_err_arr_time_min1, hc_err_arr_time_max1, hc_arr_id1, hc_arr_hit1], open(results_path+'donki_kinematics.p', "wb"))
+hc_arr_speed = [result[14] for result in results]
+hc_arr_speed1 = np.concatenate(hc_arr_speed)
+
+hc_err_arr_speed = [result[15] for result in results]
+hc_err_arr_speed1 = np.concatenate(hc_err_arr_speed)
+
+hc_arr_time_sc = [result[16] for result in results]
+hc_arr_time_sc1 = np.concatenate(hc_arr_time_sc)
+
+#pickle.dump([hc_time_num1, hc_r1, hc_lat1, hc_lon1, hc_id1, a1_ell, b1_ell, c1_ell, hc_arr_time1, hc_err_arr_time_min1, hc_err_arr_time_max1, hc_arr_id1, hc_arr_hit1, hc_arr_speed1, hc_err_arr_speed1], open(results_path+'donki_kinematics.p', "wb"))
 
 
 # In[10]:
@@ -520,8 +807,10 @@ pickle.dump([hc_time_num1, hc_r1, hc_lat1, hc_lon1, hc_id1, a1_ell, b1_ell, c1_e
 
 def plot_kinematics(x,y,z):
 
+    cme_color='#8C99FD'
+    
     plt.figure(1, figsize=(15,8))
-    plt.plot(mdates.num2date(x), y[0], 'bo', ms=1)
+    plt.plot(mdates.num2date(x), y[0], 'o', ms=1, color=cme_color)
     plt.xlabel('Time')
     plt.ylabel('Distance [AU]')
     #plt.fill_between(x, y[1], y[2], 'tab:blue', alpha=0.65)
@@ -530,7 +819,7 @@ def plot_kinematics(x,y,z):
     plt.savefig(filename,dpi=200, edgecolor='none')
 
     plt.figure(2, figsize=(15,8))
-    plt.plot(mdates.num2date(x), z[0], 'bo', ms=1)
+    plt.plot(mdates.num2date(x), z[0], 'o', ms=1, color=cme_color)
     plt.xlabel('Time')
     plt.ylabel('Velocity [km/s]')
     
@@ -552,11 +841,22 @@ def make_frame(k):
 
     fig=plt.figure(1, figsize=(19.2,10.8), dpi=100) #full hd
     #fig=plt.figure(1, figsize=(19.2*2,10.8*2), dpi=100) #4k
-    ax = plt.subplot2grid((3,2), (0, 0), rowspan=3, projection='polar')
-    backcolor='black'
-    psp_color='black'
-    bepi_color='blue'
-    solo_color='coral'
+    ax = plt.subplot2grid((19,2), (0, 0), rowspan=19, projection='polar')
+    
+    backcolor='#052E37' #xkcd:black' '#052E37'
+    psp_color='#052E37' #'xkcd:black' '#052E37'
+    bepi_color='#5833FE'
+    solo_color='#F29707' #'xkcd:orange' '#F29707'
+    earth_color='#75CC41'
+    sta_color='#E75C13'#
+    mercury_color='#9dabae'
+    venus_color='#8C11AA'
+    mars_color='#E75C13'
+    cme_color='#8C99FD'
+    
+    red = '#CC2C01' #'xkcd:magenta'
+    green = earth_color #'#BFCE40' #'xkcd:green'
+    blue = '#5833FE' #'xkcd:azure'
 
 
     frame_time_str=str(mdates.num2date(frame_time_num+k*res_in_days))
@@ -583,11 +883,11 @@ def make_frame(k):
 
     #white background
 
-    ax.scatter(venus.lon[earth_timeind], venus.r[earth_timeind]*np.cos(venus.lat[earth_timeind]), s=symsize_planet, c='tab:purple', alpha=1,lw=0,zorder=3)
-    ax.scatter(mercury.lon[earth_timeind], mercury.r[earth_timeind]*np.cos(mercury.lat[earth_timeind]), s=symsize_planet, c='dimgrey', alpha=1,lw=0,zorder=3)
-    ax.scatter(earth.lon[earth_timeind], earth.r[earth_timeind]*np.cos(earth.lat[earth_timeind]), s=symsize_planet, c='mediumseagreen', alpha=1,lw=0,zorder=3)
-    ax.scatter(sta.lon[sta_timeind], sta.r[sta_timeind]*np.cos(sta.lat[sta_timeind]), s=symsize_spacecraft, c='red', marker='s', alpha=1,lw=0,zorder=3)
-    ax.scatter(mars.lon[earth_timeind], mars.r[earth_timeind]*np.cos(mars.lat[earth_timeind]), s=symsize_planet, c='orangered', alpha=0.7,lw=0,zorder=3)
+    ax.scatter(venus.lon[earth_timeind], venus.r[earth_timeind]*np.cos(venus.lat[earth_timeind]), s=symsize_planet, c='#8C11AA', alpha=1,lw=0,zorder=3)
+    ax.scatter(mercury.lon[earth_timeind], mercury.r[earth_timeind]*np.cos(mercury.lat[earth_timeind]), s=symsize_planet, c='#9dabae', alpha=1,lw=0,zorder=3)
+    ax.scatter(earth.lon[earth_timeind], earth.r[earth_timeind]*np.cos(earth.lat[earth_timeind]), s=symsize_planet, c=earth_color, alpha=1,lw=0,zorder=3)
+    ax.scatter(sta.lon[sta_timeind], sta.r[sta_timeind]*np.cos(sta.lat[sta_timeind]), s=symsize_spacecraft, c=sta_color, marker='s', alpha=1,lw=0,zorder=3)
+    ax.scatter(mars.lon[earth_timeind], mars.r[earth_timeind]*np.cos(mars.lat[earth_timeind]), s=symsize_planet, c='#E75C13', alpha=0.7,lw=0,zorder=3)
 
 
     #plot stereoa fov hi1/2    
@@ -634,9 +934,9 @@ def make_frame(k):
             if  fadestart < 0: fadestart=0            
             ax.plot(solo.lon[fadestart:solo_timeind+fadeind], solo.r[fadestart:solo_timeind+fadeind]*np.cos(solo.lat[fadestart:solo_timeind+fadeind]), c=solo_color, linestyle='--', alpha=0.6,lw=1,zorder=3)
 
-    f10=plt.figtext(0.01,0.9,earth_text, fontsize=fsize, ha='left',color='mediumseagreen')
-    f9=plt.figtext(0.01,0.86,mars_text, fontsize=fsize, ha='left',color='orangered')
-    f8=plt.figtext(0.01,0.82,sta_text, fontsize=fsize, ha='left',color='red')
+    f10=plt.figtext(0.01,0.9,earth_text, fontsize=fsize, ha='left',color=earth_color)
+    f9=plt.figtext(0.01,0.86,mars_text, fontsize=fsize, ha='left',color='#E75C13')
+    f8=plt.figtext(0.01,0.82,sta_text, fontsize=fsize, ha='left',color=sta_color)
     
 
     ######################## 1 plot all active CME circles
@@ -662,10 +962,9 @@ def make_frame(k):
                 longcirc1.append(np.arctan2(yc1, xc1))
                 rcirc1.append(np.sqrt(xc1**2+yc1**2))
 
-            ax.plot(longcirc1[0],rcirc1[0], color='tab:blue', ls='-', alpha=1-abs(hc_lat1[cmeind1[0][p]]/100), lw=1.5) 
-            ax.fill_between(longcirc1[2], rcirc1[2], rcirc1[1], color='tab:blue', alpha=.05)
-          
-
+            ax.plot(longcirc1[0],rcirc1[0], color=cme_color, ls='-', alpha=1-abs(hc_lat1[cmeind1[0][p]]/100), lw=1.5) 
+            ax.fill_between(longcirc1[2], rcirc1[2], rcirc1[1], color=cme_color, alpha=.05)
+            
     #set axes and grid
     ax.set_theta_zero_location('E')
     #plt.thetagrids(range(0,360,45),(u'0\u00b0 '+frame+' longitude',u'45\u00b0',u'90\u00b0',u'135\u00b0',u'+/- 180\u00b0',u'- 135\u00b0',u'- 90\u00b0',u'- 45\u00b0'), ha='right', fmt='%d',fontsize=fsize-1,color=backcolor, alpha=0.9)
@@ -679,7 +978,7 @@ def make_frame(k):
     ax.set_ylim(0, 1.2)
 
     #Sun
-    ax.scatter(0,0,s=100,c='yellow',alpha=1, edgecolors='black', linewidth=0.3)
+    ax.scatter(0,0,s=100,c='#F9F200',alpha=1, edgecolors='black', linewidth=0.3)
 
 
     
@@ -690,7 +989,12 @@ def make_frame(k):
     time_now=frame_time_num+k*res_in_days
   
     #cut data for plot window so faster
+    hc_arr_time1_num = [mdates.date2num(i) for i in hc_arr_time1] 
+    speedindex1=np.where((hc_arr_time1_num >= time_now-days_window) & (hc_arr_time1_num <= time_now+days_window))[0]
 
+    hc_arr_speed_new = hc_arr_speed1[speedindex1]
+    hc_err_arr_speed_new = hc_err_arr_speed1[speedindex1]
+    
     if n_time_num[-1] > time_now+days_window:
         nindex1=np.where(n_time_num > time_now-days_window)[0][0]
         nindex2=np.where(n_time_num > time_now+days_window)[0][0]
@@ -715,103 +1019,150 @@ def make_frame(k):
         sindex2=np.size(s1)-1
         s=s1[sindex1:sindex2]
     else: s=[] 
+    
 
     #---------------- NOAA mag
+    
+    days_dist = 0.5
+    
+    std = np.array([(mdates.date2num(i) - mdates.date2num(j))/2. for i,j in zip(hc_err_arr_time_max1,hc_err_arr_time_min1)])
+    std_date = (hc_err_arr_time_max1-hc_err_arr_time_min1)/2.
+    x_1_date = np.linspace(-3*std_date,3*std_date,100)
+    x_date = [hc_arr_time1+k for k in x_1_date]
 
-    ax4 = plt.subplot2grid((3,2), (0, 1))
-    ax4.plot_date([time_now,time_now], [-1000,1000],'-k', lw=0.7, alpha=0.8)
-    ax4.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
-    ax4.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    ax4.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    x_1 = np.linspace(-3*std, 3*std, 100)
+    hc_arr_time1_num = [mdates.date2num(i) for i in hc_arr_time1] 
+    x = [hc_arr_time1_num+k for k in x_1]
+    y = norm(loc=hc_arr_time1_num, scale=std).pdf(x)
+    y_fin = y/np.nanmax(y,axis=0)
+    
 
-    ax4.set_xticklabels([])
+    with sns.axes_style('white', {'axes.edgecolor': 'none'}):
+        ax0 = plt.subplot2grid((19,2), (0, 1), rowspan=1)
+        ax0.plot(x_date, y_fin, lw=0.8, color=cme_color, alpha=0.4)
+        ax0.plot_date([hc_arr_time1,hc_arr_time1], [0,1],'-', lw=1.1, alpha=0.9, color=cme_color)
+        
+        for i in range(len(hc_arr_time1)):
+            if hc_arr_id1[i] != 'nan':
+                ccmc_date_str = hc_arr_id1[i][0:16]
+                date_format = '%Y-%m-%dT%H:%M'
+                ccmc_date_obj = datetime.strptime(ccmc_date_str, date_format)
+                label=ccmc_date_obj.strftime("%m-%d %H:%M")
+                ax0.annotate(label, (hc_arr_time1[i], 1.1), fontsize=10, rotation=315,ha='right')
+            
+        ax0.set_xlim(time_now-days_window,time_now+days_window)
+        ax0.set_ylim(0.,np.nanmax(y_fin)+0.1)
+        ax0.set_xticklabels([])
+        ax0.set_yticklabels([])
+        plt.tick_params( axis='x', labelbottom='off')
+        plt.yticks(fontsize=fsize-1)
+
+    
+    ax4 = plt.subplot2grid((19,2), (1, 1), rowspan=6)
+    ax4.plot_date([time_now,time_now], [-100,100],'-k', lw=0.7, alpha=0.8)
+    ax4.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-', lw=1.1, alpha=0.9, color=cme_color)
     ax4.set_xlim(time_now-days_window,time_now+days_window)
     ax4.set_ylabel('B [nT] GSM',fontsize=fsize-1)
+    ax4.set_xticklabels([])
+    plt.tick_params( axis='x', labelbottom='off')
+    ax4.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(days_dist))
     plt.yticks(fontsize=fsize-1)
 
     #when there is data, plot:
     
     if np.size(n)>0:
     
-        plt.plot_date(n.time,n.bx,'-r',label='BR',linewidth=0.5)
-        plt.plot_date(n.time,n.by,'-g',label='BT',linewidth=0.5)
-        plt.plot_date(n.time,n.bz,'-b',label='BN',linewidth=0.5)
-        plt.plot_date(n.time,n.bt,'-k',label='Btotal',lw=0.5)
-        
-        for i in range(len(hc_arr_time1)):
-            if np.isnan(hc_arr_hit1[i]) == False:       
-                ax4.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
-                ax4.annotate(hc_arr_id1[i][0:16], (hc_arr_time1[i], np.nanmax(n.bt)+5), fontsize=10, rotation=90)
+        plt.plot_date(n.time,n.bx,'-',c=red,label='BR',linewidth=0.5)
+        plt.plot_date(n.time,n.by,'-',c=green,label='BT',linewidth=0.5)
+        plt.plot_date(n.time,n.bz,'-',c=blue,label='BN',linewidth=0.5)
+        plt.plot_date(n.time,n.bt,'-',c=backcolor,label='Btotal',lw=0.5)
                 
         if np.isfinite(np.nanmin(-n.bt)):         
             ax4.set_ylim(np.nanmin(-n.bt)-5, np.nanmax(n.bt)+5)
-       
-                
-
-
-
+        
+    else:
+        ax4.set_ylim(-15, 15)
+        
 
     #----------------  STEREO-A mag
     
-    ax6 = plt.subplot2grid((3,2), (1, 1))
-    ax6.plot_date([time_now,time_now], [-100,100],'-k', lw=0.5, alpha=0.8)
-    ax6.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
-    ax6.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    ax6.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    for i in range(len(hc_arr_time1)):
-        ax6.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
-        
+    ax6 = plt.subplot2grid((19,2), (7, 1), rowspan=6)
+    ax6.plot_date([time_now,time_now], [-100,100],'-k', lw=0.7, alpha=0.8)
+    ax6.plot_date([hc_arr_time_sc1,hc_arr_time_sc1], [-1000,1000],'-', lw=1.1, alpha=0.9, color=cme_color)
+    #ax6.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-', lw=1.1, alpha=0.9, color=cme_color)
     ax6.set_xlim(time_now-days_window,time_now+days_window)
     ax6.set_xticklabels([])
     ax6.set_ylabel('B [nT] GSM',fontsize=fsize-1)
     plt.yticks(fontsize=fsize-1) 
-    plt.tick_params( axis='x', labelbottom='off')
+    #plt.tick_params( axis='x', labelbottom='off')
     
     if np.size(s)>0:
         
-        plt.plot_date(s.time,s.bx,'-r',label='BR',linewidth=0.5)
-        plt.plot_date(s.time,s.by,'-g',label='BT',linewidth=0.5)
-        plt.plot_date(s.time,s.bz,'-b',label='BN',linewidth=0.5)
-        plt.plot_date(s.time,s.bt,'-k',label='Btotal',linewidth=0.5)
+        plt.plot_date(s.time,s.bx,'-',c=red,label='BR',linewidth=0.5)
+        plt.plot_date(s.time,s.by,'-',c=green,label='BT',linewidth=0.5)
+        plt.plot_date(s.time,s.bz,'-',c=blue,label='BN',linewidth=0.5)
+        plt.plot_date(s.time,s.bt,'-',c=backcolor,label='Btotal',linewidth=0.5)
     
         if np.isfinite(np.nanmin(-s.bt)):         
-            ax6.set_ylim(np.nanmin(-s.bt)-5, np.nanmax(s.bt)+5)
+            ax6.set_ylim(np.nanmin(-s.bt)-5, np.nanmax(s.bt)+5)  
+               
+    else:
+        ax6.set_ylim(-15, 15)
         
+    ax6.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(days_dist))
+    ax6.xaxis.set_major_formatter( matplotlib.dates.DateFormatter('%b-%d %H:%M') )
+    ax6.tick_params(axis='x', labelsize=15)
     
+        
     #----------------  STEREO, NOAA speed    
     
-    ax5 = plt.subplot2grid((3,2), (2, 1))
+    ax5 = plt.subplot2grid((19,2), (13, 1), rowspan=6)
     ax5.set_xlim(time_now-days_window,time_now+days_window)
-    ax5.plot_date([time_now,time_now], [0,800],'-k', lw=0.5, alpha=0.8)
-    ax5.plot_date([hc_arr_time1,hc_arr_time1], [-1000,10000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
-    ax5.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,10000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    ax5.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,10000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    for i in range(len(hc_arr_time1)):
-        ax5.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
+
+    ax5.plot_date([hc_arr_time1,hc_arr_time1], [-1000,10000],'-', lw=1.1, alpha=0.9, color=cme_color)
+    ax5.plot_date([hc_arr_time1,hc_arr_time1], [hc_arr_speed1-hc_err_arr_speed1,hc_arr_speed1+hc_err_arr_speed1],'_', ms=5, alpha=0.8, lw=0.7, color=cme_color)
+    ax5.plot_date([hc_arr_time1,hc_arr_time1], [hc_arr_speed1,hc_arr_speed1],'o', ms=4, alpha=0.8, lw=0.7, color=cme_color)
     plt.ylabel('V [km/s]',fontsize=fsize-1)
-    #plt.ylim((240, 750))
     plt.yticks(fontsize=fsize-1)
-    ax5.xaxis.set_major_formatter( matplotlib.dates.DateFormatter('%b-%d') )
-    #ax5.set_xticklabels([])
+    #plt.tick_params( axis='x', labelbottom='off')
+    ax5.set_xticklabels([])
+    ax5.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(days_dist))
+    #ax5.xaxis.set_major_formatter( matplotlib.dates.DateFormatter('%b-%d') )
     
     if np.size(s)>0:
-        plt.plot_date(s.time,s.vt,'-r',label='STEREO-A',linewidth=0.7)
+        plt.plot_date(s.time,s.vt,'-',c=red,label='speed STEREO-A',linewidth=0.7)
+        ax5.legend(fontsize=12, loc='lower right', ncol=2)
     if np.size(n)>0:
-        plt.plot_date(n.time,n.vt,'-g',label='V',linewidth=0.7)  
-        ax5.set_ylim(200, np.nanmax(n.vt)+20)
+        plt.plot_date(n.time,n.vt,'-',c=backcolor,label='speed NOAA',linewidth=0.7)  
+        ax5.legend(fontsize=12, loc='lower right', ncol=2)
+        
+        if np.size(hc_arr_speed_new)>0:
+            if np.nanmax(n.vt) > np.nanmax(hc_arr_speed_new)+np.nanmax(hc_err_arr_speed_new):
+                ax5.set_ylim(200, np.nanmax(n.vt)+20)
+
+            else:
+                ax5.set_ylim(200, np.nanmax(hc_arr_speed_new)+np.nanmax(hc_err_arr_speed_new)+20)
+        else:
+            ax5.set_ylim(200, np.nanmax(n.vt)+20)
         
     elif np.size(n) == 0:
         ax5.set_ylim(200,750)
+    ax5.plot_date([time_now,time_now], [0,2000],'-k', lw=0.7, alpha=0.8)
+    
+    ax0.set_position([0.55, 0.869, 0.36, 0.03])  # First subplot [left, bottom, width, height]
+    ax5.set_position([0.55, 0.62, 0.36, 0.25])   # Second subplot
+    
+    ax4.set_position([0.55, 0.36, 0.36, 0.25])  # Third subplot
+    ax6.set_position([0.55, 0.1, 0.36, 0.25])   # Fourth subplot
         
-
-    plt.figtext(0.95,0.77,'NOAA', color='mediumseagreen', ha='center',fontsize=fsize+3)
-    plt.figtext(0.95,0.49,'STEREO-A', color='red', ha='center',fontsize=fsize+3)
-    plt.figtext(0.95,0.23,'NOAA', color='mediumseagreen', ha='center',fontsize=fsize+3)
-    plt.figtext(0.95,0.18,'STEREO-A', color='red', ha='center',fontsize=fsize+3)
-    plt.figtext(0.92,0.91,r'B$_{\mathrm{x}}$', color='red', ha='center',fontsize=fsize)
-    plt.figtext(0.94,0.91,r'B$_{\mathrm{y}}$', color='green', ha='center',fontsize=fsize)
-    plt.figtext(0.96,0.91,r'B$_{\mathrm{z}}$', color='blue', ha='center',fontsize=fsize)
-    plt.figtext(0.98,0.91,r'B$_{\mathrm{tot}}$', color='black', ha='center',fontsize=fsize)
+    plt.figtext(0.95,0.76,'NOAA', color=earth_color, ha='center',fontsize=fsize+3)
+    plt.figtext(0.95,0.71,'STEREO-A', color=sta_color, ha='center',fontsize=fsize+3)
+    plt.figtext(0.95,0.49,'NOAA', color=earth_color, ha='center',fontsize=fsize+3)
+    plt.figtext(0.95,0.22,'STEREO-A', color=sta_color, ha='center',fontsize=fsize+3)
+    plt.figtext(0.92,0.91,r'B$_{\mathrm{x}}$', color=red, ha='center',fontsize=fsize)
+    plt.figtext(0.94,0.91,r'B$_{\mathrm{y}}$', color=green, ha='center',fontsize=fsize)
+    plt.figtext(0.96,0.91,r'B$_{\mathrm{z}}$', color=blue, ha='center',fontsize=fsize)
+    plt.figtext(0.98,0.91,r'B$_{\mathrm{tot}}$', color=backcolor, ha='center',fontsize=fsize)
     
     ############################
 
@@ -830,11 +1181,11 @@ def make_frame(k):
     
     plt.figtext(0.02, 0.08, 'created: '+ str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC', fontsize=fsize-3, ha='left', color=backcolor)
     
-    plt.figtext(0.02, 0.1,'DONKI (CCMC) - kinematics: ELEvo', fontsize=fsize-1, ha='left',color='tab:blue')
+    plt.figtext(0.02, 0.1,'Input: DONKI (CCMC), Model: ELEvo', fontsize=fsize-1, ha='left',color=cme_color)
     
     plt.figtext(0.02, 0.033,'Spacecraft trajectories '+frame+' 2D projection', fontsize=fsize-1, ha='left',color=backcolor)
     
-    plt.figtext(0.34,0.033,r'---- trajectory from $-\,30$ days to $+\,30$ days', color='black', ha='center',fontsize=fsize-1)
+    plt.figtext(0.34,0.033,r'---- trajectory from $-\,30$ days to $+\,30$ days', color=backcolor, ha='center',fontsize=fsize-1)
 
     #signature
     
@@ -847,12 +1198,13 @@ def make_frame(k):
     
     #signature
     plt.figtext(0.02,0.01/2,r'Austrian Space Weather Office, GeoSphere Austria', fontsize=fsize-4, ha='left',color=backcolor) 
-    plt.figtext(0.99,0.01/2,'helioforecast.space', fontsize=fsize-4, ha='right',color=backcolor) 
+    plt.figtext(0.2,0.01/2,r'helioforecast.space', fontsize=fsize-4, ha='left',color=backcolor)
+    plt.figtext(0.99,0.01/2,'© GeoSphere Austria', fontsize=fsize-2, ha='right',color='#9AACAF') 
     
-    logo = plt.imread('/perm/aswo/eweiler/ELEvo/logo/GSA_Basislogo_Positiv_RGB_XXS.png')
-    newax = fig.add_axes([0.91,0.91,0.08,0.08], anchor='NE', zorder=1)
-    newax.imshow(logo)
-    newax.axis('off') 
+    #logo = plt.imread('/perm/aswo/eweiler/ELEvo/logo/GSA_Basislogo_Positiv_RGB_XXS.png')
+    #newax = fig.add_axes([0.91,0.91,0.08,0.08], anchor='NE', zorder=1)
+    #newax.imshow(logo)
+    #newax.axis('off') 
         
     categories = np.array([0, 2, 1, 1, 1, 2, 0, 0])
 
@@ -893,14 +1245,26 @@ def make_frame2(k):
     loop each frame in multiprocessing
     '''
     
+    
 
     fig=plt.figure(1, figsize=(19.2,10.8), dpi=100) #full hd
     #fig=plt.figure(1, figsize=(19.2*2,10.8*2), dpi=100) #4k
-    ax = plt.subplot2grid((3,2), (0, 0), rowspan=3, projection='polar')
-    backcolor='black'
-    psp_color='black'
-    bepi_color='blue'
-    solo_color='coral'
+    ax = plt.subplot2grid((19,2), (0, 0), rowspan=19, projection='polar')
+    
+    backcolor='#052E37' #xkcd:black' '#052E37'
+    psp_color='#052E37' #'xkcd:black' '#052E37'
+    bepi_color='#5833FE'
+    solo_color='#F29707' #'xkcd:orange' '#F29707'
+    earth_color='#75CC41'
+    sta_color='#E75C13'#
+    mercury_color='#9dabae'
+    venus_color='#8C11AA'
+    mars_color='#E75C13'
+    cme_color='#8C99FD'
+    
+    red = '#CC2C01' #'xkcd:magenta'
+    green = earth_color #'#BFCE40' #'xkcd:green'
+    blue = '#5833FE' #'xkcd:azure'
 
 
     frame_time_str=str(mdates.num2date(frame_time_num+k*res_in_days))
@@ -927,11 +1291,11 @@ def make_frame2(k):
 
     #white background
 
-    ax.scatter(venus.lon[earth_timeind], venus.r[earth_timeind]*np.cos(venus.lat[earth_timeind]), s=symsize_planet, c='tab:purple', alpha=1,lw=0,zorder=3)
-    ax.scatter(mercury.lon[earth_timeind], mercury.r[earth_timeind]*np.cos(mercury.lat[earth_timeind]), s=symsize_planet, c='dimgrey', alpha=1,lw=0,zorder=3)
-    ax.scatter(earth.lon[earth_timeind], earth.r[earth_timeind]*np.cos(earth.lat[earth_timeind]), s=symsize_planet, c='mediumseagreen', alpha=1,lw=0,zorder=3)
-    ax.scatter(sta.lon[sta_timeind], sta.r[sta_timeind]*np.cos(sta.lat[sta_timeind]), s=symsize_spacecraft, c='red', marker='s', alpha=1,lw=0,zorder=3)
-    ax.scatter(mars.lon[earth_timeind], mars.r[earth_timeind]*np.cos(mars.lat[earth_timeind]), s=symsize_planet, c='orangered', alpha=0.7,lw=0,zorder=3)
+    ax.scatter(venus.lon[earth_timeind], venus.r[earth_timeind]*np.cos(venus.lat[earth_timeind]), s=symsize_planet, c='#8C11AA', alpha=1,lw=0,zorder=3)
+    ax.scatter(mercury.lon[earth_timeind], mercury.r[earth_timeind]*np.cos(mercury.lat[earth_timeind]), s=symsize_planet, c='#9dabae', alpha=1,lw=0,zorder=3)
+    ax.scatter(earth.lon[earth_timeind], earth.r[earth_timeind]*np.cos(earth.lat[earth_timeind]), s=symsize_planet, c=earth_color, alpha=1,lw=0,zorder=3)
+    ax.scatter(sta.lon[sta_timeind], sta.r[sta_timeind]*np.cos(sta.lat[sta_timeind]), s=symsize_spacecraft, c=sta_color, marker='s', alpha=1,lw=0,zorder=3)
+    ax.scatter(mars.lon[earth_timeind], mars.r[earth_timeind]*np.cos(mars.lat[earth_timeind]), s=symsize_planet, c='#E75C13', alpha=0.7,lw=0,zorder=3)
 
 
     #plot stereoa fov hi1/2    
@@ -978,9 +1342,9 @@ def make_frame2(k):
             if  fadestart < 0: fadestart=0            
             ax.plot(solo.lon[fadestart:solo_timeind+fadeind], solo.r[fadestart:solo_timeind+fadeind]*np.cos(solo.lat[fadestart:solo_timeind+fadeind]), c=solo_color, linestyle='--', alpha=0.6,lw=1,zorder=3)
 
-    f10=plt.figtext(0.01,0.9,earth_text, fontsize=fsize, ha='left',color='mediumseagreen')
-    f9=plt.figtext(0.01,0.86,mars_text, fontsize=fsize, ha='left',color='orangered')
-    f8=plt.figtext(0.01,0.82,sta_text, fontsize=fsize, ha='left',color='red')
+    f10=plt.figtext(0.01,0.9,earth_text, fontsize=fsize, ha='left',color=earth_color)
+    f9=plt.figtext(0.01,0.86,mars_text, fontsize=fsize, ha='left',color='#E75C13')
+    f8=plt.figtext(0.01,0.82,sta_text, fontsize=fsize, ha='left',color=sta_color)
     
 
     ######################## 1 plot all active CME circles
@@ -1006,10 +1370,9 @@ def make_frame2(k):
                 longcirc1.append(np.arctan2(yc1, xc1))
                 rcirc1.append(np.sqrt(xc1**2+yc1**2))
 
-            ax.plot(longcirc1[0],rcirc1[0], color='tab:blue', ls='-', alpha=1-abs(hc_lat1[cmeind1[0][p]]/100), lw=1.5) 
-            ax.fill_between(longcirc1[2], rcirc1[2], rcirc1[1], color='tab:blue', alpha=.05)
-          
-
+            ax.plot(longcirc1[0],rcirc1[0], color=cme_color, ls='-', alpha=1-abs(hc_lat1[cmeind1[0][p]]/100), lw=1.5) 
+            ax.fill_between(longcirc1[2], rcirc1[2], rcirc1[1], color=cme_color, alpha=.05)
+            
     #set axes and grid
     ax.set_theta_zero_location('E')
     #plt.thetagrids(range(0,360,45),(u'0\u00b0 '+frame+' longitude',u'45\u00b0',u'90\u00b0',u'135\u00b0',u'+/- 180\u00b0',u'- 135\u00b0',u'- 90\u00b0',u'- 45\u00b0'), ha='right', fmt='%d',fontsize=fsize-1,color=backcolor, alpha=0.9)
@@ -1023,7 +1386,7 @@ def make_frame2(k):
     ax.set_ylim(0, 1.2)
 
     #Sun
-    ax.scatter(0,0,s=100,c='yellow',alpha=1, edgecolors='black', linewidth=0.3)
+    ax.scatter(0,0,s=100,c='#F9F200',alpha=1, edgecolors='black', linewidth=0.3)
 
 
     
@@ -1034,7 +1397,12 @@ def make_frame2(k):
     time_now=frame_time_num+k*res_in_days
   
     #cut data for plot window so faster
+    hc_arr_time1_num = [mdates.date2num(i) for i in hc_arr_time1] 
+    speedindex1=np.where((hc_arr_time1_num >= time_now-days_window) & (hc_arr_time1_num <= time_now+days_window))[0]
 
+    hc_arr_speed_new = hc_arr_speed1[speedindex1]
+    hc_err_arr_speed_new = hc_err_arr_speed1[speedindex1]
+    
     if n_time_num[-1] > time_now+days_window:
         nindex1=np.where(n_time_num > time_now-days_window)[0][0]
         nindex2=np.where(n_time_num > time_now+days_window)[0][0]
@@ -1059,103 +1427,150 @@ def make_frame2(k):
         sindex2=np.size(s1)-1
         s=s1[sindex1:sindex2]
     else: s=[] 
+    
 
     #---------------- NOAA mag
+    
+    days_dist = 0.5
+    
+    std = np.array([(mdates.date2num(i) - mdates.date2num(j))/2. for i,j in zip(hc_err_arr_time_max1,hc_err_arr_time_min1)])
+    std_date = (hc_err_arr_time_max1-hc_err_arr_time_min1)/2.
+    x_1_date = np.linspace(-3*std_date,3*std_date,100)
+    x_date = [hc_arr_time1+k for k in x_1_date]
 
-    ax4 = plt.subplot2grid((3,2), (0, 1))
-    ax4.plot_date([time_now,time_now], [-1000,1000],'-k', lw=0.7, alpha=0.8)
-    ax4.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
-    ax4.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    ax4.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
+    x_1 = np.linspace(-3*std, 3*std, 100)
+    hc_arr_time1_num = [mdates.date2num(i) for i in hc_arr_time1] 
+    x = [hc_arr_time1_num+k for k in x_1]
+    y = norm(loc=hc_arr_time1_num, scale=std).pdf(x)
+    y_fin = y/np.nanmax(y,axis=0)
+    
 
-    ax4.set_xticklabels([])
+    with sns.axes_style('white', {'axes.edgecolor': 'none'}):
+        ax0 = plt.subplot2grid((19,2), (0, 1), rowspan=1)
+        ax0.plot(x_date, y_fin, lw=0.8, color=cme_color, alpha=0.4)
+        ax0.plot_date([hc_arr_time1,hc_arr_time1], [0,1],'-', lw=1.1, alpha=0.9, color=cme_color)
+        
+        for i in range(len(hc_arr_time1)):
+            if hc_arr_id1[i] != 'nan':
+                ccmc_date_str = hc_arr_id1[i][0:16]
+                date_format = '%Y-%m-%dT%H:%M'
+                ccmc_date_obj = datetime.strptime(ccmc_date_str, date_format)
+                label=ccmc_date_obj.strftime("%m-%d %H:%M")
+                ax0.annotate(label, (hc_arr_time1[i], 1.1), fontsize=10, rotation=315,ha='right')
+            
+        ax0.set_xlim(time_now-days_window,time_now+days_window)
+        ax0.set_ylim(0.,np.nanmax(y_fin)+0.1)
+        ax0.set_xticklabels([])
+        ax0.set_yticklabels([])
+        plt.tick_params( axis='x', labelbottom='off')
+        plt.yticks(fontsize=fsize-1)
+
+    
+    ax4 = plt.subplot2grid((19,2), (1, 1), rowspan=6)
+    ax4.plot_date([time_now,time_now], [-100,100],'-k', lw=0.7, alpha=0.8)
+    ax4.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-', lw=1.1, alpha=0.9, color=cme_color)
     ax4.set_xlim(time_now-days_window,time_now+days_window)
     ax4.set_ylabel('B [nT] GSM',fontsize=fsize-1)
+    ax4.set_xticklabels([])
+    plt.tick_params( axis='x', labelbottom='off')
+    ax4.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(days_dist))
     plt.yticks(fontsize=fsize-1)
 
     #when there is data, plot:
     
     if np.size(n)>0:
     
-        plt.plot_date(n.time,n.bx,'-r',label='BR',linewidth=0.5)
-        plt.plot_date(n.time,n.by,'-g',label='BT',linewidth=0.5)
-        plt.plot_date(n.time,n.bz,'-b',label='BN',linewidth=0.5)
-        plt.plot_date(n.time,n.bt,'-k',label='Btotal',lw=0.5)
-        
-        for i in range(len(hc_arr_time1)):
-            if np.isnan(hc_arr_hit1[i]) == False:       
-                ax4.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
-                ax4.annotate(hc_arr_id1[i][0:16], (hc_arr_time1[i], np.nanmax(n.bt)+5), fontsize=10, rotation=90)
+        plt.plot_date(n.time,n.bx,'-',c=red,label='BR',linewidth=0.5)
+        plt.plot_date(n.time,n.by,'-',c=green,label='BT',linewidth=0.5)
+        plt.plot_date(n.time,n.bz,'-',c=blue,label='BN',linewidth=0.5)
+        plt.plot_date(n.time,n.bt,'-',c=backcolor,label='Btotal',lw=0.5)
                 
         if np.isfinite(np.nanmin(-n.bt)):         
             ax4.set_ylim(np.nanmin(-n.bt)-5, np.nanmax(n.bt)+5)
-       
-                
-
-
-
+        
+    else:
+        ax4.set_ylim(np.nanmin(-n.bt[-1:-100])-5, np.nanmax(n.bt[-1:-100])+5)
+        
 
     #----------------  STEREO-A mag
     
-    ax6 = plt.subplot2grid((3,2), (1, 1))
-    ax6.plot_date([time_now,time_now], [-100,100],'-k', lw=0.5, alpha=0.8)
-    ax6.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
-    ax6.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    ax6.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,1000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    for i in range(len(hc_arr_time1)):
-        ax6.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
-        
+    ax6 = plt.subplot2grid((19,2), (7, 1), rowspan=6)
+    ax6.plot_date([time_now,time_now], [-100,100],'-k', lw=0.7, alpha=0.8)
+    ax6.plot_date([hc_arr_time_sc1,hc_arr_time_sc1], [-1000,1000],'-', lw=1.1, alpha=0.9, color=cme_color)
+    #ax6.plot_date([hc_arr_time1,hc_arr_time1], [-1000,1000],'-', lw=1.1, alpha=0.9, color=cme_color)
     ax6.set_xlim(time_now-days_window,time_now+days_window)
     ax6.set_xticklabels([])
     ax6.set_ylabel('B [nT] GSM',fontsize=fsize-1)
     plt.yticks(fontsize=fsize-1) 
-    plt.tick_params( axis='x', labelbottom='off')
+    #plt.tick_params( axis='x', labelbottom='off')
     
     if np.size(s)>0:
         
-        plt.plot_date(s.time,s.bx,'-r',label='BR',linewidth=0.5)
-        plt.plot_date(s.time,s.by,'-g',label='BT',linewidth=0.5)
-        plt.plot_date(s.time,s.bz,'-b',label='BN',linewidth=0.5)
-        plt.plot_date(s.time,s.bt,'-k',label='Btotal',linewidth=0.5)
+        plt.plot_date(s.time,s.bx,'-',c=red,label='BR',linewidth=0.5)
+        plt.plot_date(s.time,s.by,'-',c=green,label='BT',linewidth=0.5)
+        plt.plot_date(s.time,s.bz,'-',c=blue,label='BN',linewidth=0.5)
+        plt.plot_date(s.time,s.bt,'-',c=backcolor,label='Btotal',linewidth=0.5)
     
         if np.isfinite(np.nanmin(-s.bt)):         
             ax6.set_ylim(np.nanmin(-s.bt)-5, np.nanmax(s.bt)+5)  
+               
+    else:
+        ax6.set_ylim(np.nanmin(-s.bt[-1:-100])-5, np.nanmax(s.bt[-1:-100])+5)
         
+    ax6.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(days_dist))
+    ax6.xaxis.set_major_formatter( matplotlib.dates.DateFormatter('%b-%d %H:%M') )
+    ax6.tick_params(axis='x', labelsize=15)
+    
         
     #----------------  STEREO, NOAA speed    
     
-    ax5 = plt.subplot2grid((3,2), (2, 1))
+    ax5 = plt.subplot2grid((19,2), (13, 1), rowspan=6)
     ax5.set_xlim(time_now-days_window,time_now+days_window)
-    ax5.plot_date([time_now,time_now], [0,800],'-k', lw=0.5, alpha=0.8)
-    ax5.plot_date([hc_arr_time1,hc_arr_time1], [-1000,10000],'-k', lw=0.7, alpha=0.8, color='tab:blue')
-    ax5.plot_date([hc_err_arr_time_min1,hc_err_arr_time_min1], [-1000,10000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    ax5.plot_date([hc_err_arr_time_max1,hc_err_arr_time_max1], [-1000,10000],'-k', lw=0.5, alpha=0.4, color='tab:blue')
-    for i in range(len(hc_arr_time1)):
-        ax5.axvspan(hc_err_arr_time_min1[i], hc_err_arr_time_max1[i], alpha=0.04, color='tab:blue')
+
+    ax5.plot_date([hc_arr_time1,hc_arr_time1], [-1000,10000],'-', lw=1.1, alpha=0.9, color=cme_color)
+    ax5.plot_date([hc_arr_time1,hc_arr_time1], [hc_arr_speed1-hc_err_arr_speed1,hc_arr_speed1+hc_err_arr_speed1],'_', ms=5, alpha=0.8, lw=0.7, color=cme_color)
+    ax5.plot_date([hc_arr_time1,hc_arr_time1], [hc_arr_speed1,hc_arr_speed1],'o', ms=4, alpha=0.8, lw=0.7, color=cme_color)
     plt.ylabel('V [km/s]',fontsize=fsize-1)
-    #plt.ylim((240, 750))
     plt.yticks(fontsize=fsize-1)
-    ax5.xaxis.set_major_formatter( matplotlib.dates.DateFormatter('%b-%d') )
-    #ax5.set_xticklabels([])
+    #plt.tick_params( axis='x', labelbottom='off')
+    ax5.set_xticklabels([])
+    ax5.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(days_dist))
+    #ax5.xaxis.set_major_formatter( matplotlib.dates.DateFormatter('%b-%d') )
     
     if np.size(s)>0:
-        plt.plot_date(s.time,s.vt,'-r',label='STEREO-A',linewidth=0.7)
+        plt.plot_date(s.time,s.vt,'-',c=red,label='speed STEREO-A',linewidth=0.7)
+        ax5.legend(fontsize=12, loc='lower right', ncol=2)
     if np.size(n)>0:
-        plt.plot_date(n.time,n.vt,'-g',label='V',linewidth=0.7)  
-        ax5.set_ylim(200, np.nanmax(n.vt)+20)
+        plt.plot_date(n.time,n.vt,'-',c=backcolor,label='speed NOAA',linewidth=0.7)  
+        ax5.legend(fontsize=12, loc='lower right', ncol=2)
+        
+        if np.size(hc_arr_speed_new)>0:
+            if np.nanmax(n.vt) > np.nanmax(hc_arr_speed_new)+np.nanmax(hc_err_arr_speed_new):
+                ax5.set_ylim(200, np.nanmax(n.vt)+20)
+
+            else:
+                ax5.set_ylim(200, np.nanmax(hc_arr_speed_new)+np.nanmax(hc_err_arr_speed_new)+20)
+        else:
+            ax5.set_ylim(200, np.nanmax(n.vt)+20)
         
     elif np.size(n) == 0:
         ax5.set_ylim(200,750)
-
-
-    plt.figtext(0.95,0.77,'NOAA', color='mediumseagreen', ha='center',fontsize=fsize+3)
-    plt.figtext(0.95,0.49,'STEREO-A', color='red', ha='center',fontsize=fsize+3)
-    plt.figtext(0.95,0.23,'NOAA', color='mediumseagreen', ha='center',fontsize=fsize+3)
-    plt.figtext(0.95,0.18,'STEREO-A', color='red', ha='center',fontsize=fsize+3)
-    plt.figtext(0.92,0.91,r'B$_{\mathrm{x}}$', color='red', ha='center',fontsize=fsize)
-    plt.figtext(0.94,0.91,r'B$_{\mathrm{y}}$', color='green', ha='center',fontsize=fsize)
-    plt.figtext(0.96,0.91,r'B$_{\mathrm{z}}$', color='blue', ha='center',fontsize=fsize)
-    plt.figtext(0.98,0.91,r'B$_{\mathrm{tot}}$', color='black', ha='center',fontsize=fsize)
+    ax5.plot_date([time_now,time_now], [0,2000],'-k', lw=0.7, alpha=0.8)
+    
+    ax0.set_position([0.55, 0.869, 0.36, 0.03])  # First subplot [left, bottom, width, height]
+    ax5.set_position([0.55, 0.62, 0.36, 0.25])   # Second subplot
+    
+    ax4.set_position([0.55, 0.36, 0.36, 0.25])  # Third subplot
+    ax6.set_position([0.55, 0.1, 0.36, 0.25])   # Fourth subplot
+        
+    plt.figtext(0.95,0.76,'NOAA', color=earth_color, ha='center',fontsize=fsize+3)
+    plt.figtext(0.95,0.71,'STEREO-A', color=sta_color, ha='center',fontsize=fsize+3)
+    plt.figtext(0.95,0.49,'NOAA', color=earth_color, ha='center',fontsize=fsize+3)
+    plt.figtext(0.95,0.22,'STEREO-A', color=sta_color, ha='center',fontsize=fsize+3)
+    plt.figtext(0.92,0.91,r'B$_{\mathrm{x}}$', color=red, ha='center',fontsize=fsize)
+    plt.figtext(0.94,0.91,r'B$_{\mathrm{y}}$', color=green, ha='center',fontsize=fsize)
+    plt.figtext(0.96,0.91,r'B$_{\mathrm{z}}$', color=blue, ha='center',fontsize=fsize)
+    plt.figtext(0.98,0.91,r'B$_{\mathrm{tot}}$', color=backcolor, ha='center',fontsize=fsize)
     
     ############################
 
@@ -1174,11 +1589,11 @@ def make_frame2(k):
     
     plt.figtext(0.02, 0.08, 'created: '+ str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC', fontsize=fsize-3, ha='left', color=backcolor)
     
-    plt.figtext(0.02, 0.1,'DONKI (CCMC) - kinematics: ELEvo', fontsize=fsize-1, ha='left',color='tab:blue')
+    plt.figtext(0.02, 0.1,'Input: DONKI (CCMC), Model: ELEvo', fontsize=fsize-1, ha='left',color=cme_color)
     
     plt.figtext(0.02, 0.033,'Spacecraft trajectories '+frame+' 2D projection', fontsize=fsize-1, ha='left',color=backcolor)
     
-    plt.figtext(0.34,0.033,r'---- trajectory from $-\,30$ days to $+\,30$ days', color='black', ha='center',fontsize=fsize-1)
+    plt.figtext(0.34,0.033,r'---- trajectory from $-\,30$ days to $+\,30$ days', color=backcolor, ha='center',fontsize=fsize-1)
 
     #signature
     
@@ -1191,17 +1606,17 @@ def make_frame2(k):
     
     #signature
     plt.figtext(0.02,0.01/2,r'Austrian Space Weather Office, GeoSphere Austria', fontsize=fsize-4, ha='left',color=backcolor) 
-    plt.figtext(0.99,0.01/2,'helioforecast.space', fontsize=fsize-4, ha='right',color=backcolor) 
+    plt.figtext(0.2,0.01/2,r'helioforecast.space', fontsize=fsize-4, ha='left',color=backcolor)
+    plt.figtext(0.99,0.01/2,'© GeoSphere Austria', fontsize=fsize-2, ha='right',color='#9AACAF') 
     
-    logo = plt.imread('/perm/aswo/eweiler/ELEvo/logo/GSA_Basislogo_Positiv_RGB_XXS.png')
-    newax = fig.add_axes([0.91,0.91,0.08,0.08], anchor='NE', zorder=1)
-    newax.imshow(logo)
-    newax.axis('off') 
+    #logo = plt.imread('/perm/aswo/eweiler/ELEvo/logo/GSA_Basislogo_Positiv_RGB_XXS.png')
+    #newax = fig.add_axes([0.91,0.91,0.08,0.08], anchor='NE', zorder=1)
+    #newax.imshow(logo)
+    #newax.axis('off') 
         
     categories = np.array([0, 2, 1, 1, 1, 2, 0, 0])
 
     colormap = np.array(['r', 'g', 'b'])
-    
     
     steps=60
     #parker spiral
@@ -1212,7 +1627,6 @@ def make_frame2(k):
             r0=695000/AUkm
             r=v/omega*theta+r0*7
             ax.plot(-theta+np.deg2rad(0+(360/24.47)*res_in_days*k+360/12*q), r, alpha=0.1, lw=0.5,color='grey',zorder=2)
-            
    
     filename=animdirectory+'/current_image.jpg'  
     #if k==0: print(filename)
@@ -1242,6 +1656,20 @@ def make_frame3(k):
     loop each frame in multiprocessing
     '''
     
+    backcolor='#052E37' #xkcd:black' '#052E37'
+    psp_color='#052E37' #'xkcd:black' '#052E37'
+    bepi_color='#5833FE'
+    solo_color='#F29707' #'xkcd:orange' '#F29707'
+    earth_color='#75CC41'
+    sta_color='#E75C13'#
+    mercury_color='#9dabae'
+    venus_color='#8C11AA'
+    mars_color='#E75C13'
+    cme_color='#8C99FD'
+    
+    red = '#CC2C01' #'xkcd:magenta'
+    green = earth_color #'#BFCE40' #'xkcd:green'
+    blue = '#5833FE' #'xkcd:azure'
 
     fig=plt.figure(1, figsize=(15.2,10.8), dpi=200) #full hd
     #fig=plt.figure(1, figsize=(19.2*2,10.8*2), dpi=100) #4k
@@ -1250,7 +1678,7 @@ def make_frame3(k):
     psp_color='black'
     bepi_color='blue'
     solo_color='coral'
-
+    sun_color='#F9F200'
 
     frame_time_str=str(mdates.num2date(frame_time_num+k*res_in_days))
     #print( 'current frame_time_num', frame_time_str, '     ',k)
@@ -1278,11 +1706,11 @@ def make_frame3(k):
 
     #white background
 
-    ax.scatter(venus.lon[earth_timeind], venus.r[earth_timeind]*np.cos(venus.lat[earth_timeind]), s=symsize_planet, c='tab:purple', alpha=1,lw=0,zorder=3)
-    ax.scatter(mercury.lon[earth_timeind], mercury.r[earth_timeind]*np.cos(mercury.lat[earth_timeind]), s=symsize_planet, c='dimgrey', alpha=1,lw=0,zorder=3)
-    ax.scatter(earth.lon[earth_timeind], earth.r[earth_timeind]*np.cos(earth.lat[earth_timeind]), s=symsize_planet, c='mediumseagreen', alpha=1,lw=0,zorder=3)
-    ax.scatter(sta.lon[sta_timeind], sta.r[sta_timeind]*np.cos(sta.lat[sta_timeind]), s=symsize_spacecraft, c='red', marker='s', alpha=1,lw=0,zorder=3)
-    ax.scatter(mars.lon[earth_timeind], mars.r[earth_timeind]*np.cos(mars.lat[earth_timeind]), s=symsize_planet, c='orangered', alpha=0.7,lw=0,zorder=3)
+    ax.scatter(venus.lon[earth_timeind], venus.r[earth_timeind]*np.cos(venus.lat[earth_timeind]), s=symsize_planet, c=venus_color, alpha=1,lw=0,zorder=3)
+    ax.scatter(mercury.lon[earth_timeind], mercury.r[earth_timeind]*np.cos(mercury.lat[earth_timeind]), s=symsize_planet, c=mercury_color, alpha=1,lw=0,zorder=3)
+    ax.scatter(earth.lon[earth_timeind], earth.r[earth_timeind]*np.cos(earth.lat[earth_timeind]), s=symsize_planet, c=earth_color, alpha=1,lw=0,zorder=3)
+    ax.scatter(sta.lon[sta_timeind], sta.r[sta_timeind]*np.cos(sta.lat[sta_timeind]), s=symsize_spacecraft, c=sta_color, marker='s', alpha=1,lw=0,zorder=3)
+    ax.scatter(mars.lon[earth_timeind], mars.r[earth_timeind]*np.cos(mars.lat[earth_timeind]), s=symsize_planet, c=mars_color, alpha=0.7,lw=0,zorder=3)
 
 
     #plot stereoa fov hi1/2    
@@ -1329,9 +1757,9 @@ def make_frame3(k):
             if  fadestart < 0: fadestart=0            
             ax.plot(solo.lon[fadestart:solo_timeind+fadeind], solo.r[fadestart:solo_timeind+fadeind]*np.cos(solo.lat[fadestart:solo_timeind+fadeind]), c=solo_color, linestyle='--', alpha=0.6,lw=1,zorder=3)
 
-    f10=plt.figtext(0.01,0.9,earth_text, fontsize=fsize, ha='left',color='mediumseagreen')
-    f9=plt.figtext(0.01,0.86,mars_text, fontsize=fsize, ha='left',color='orangered')
-    f8=plt.figtext(0.01,0.82,sta_text, fontsize=fsize, ha='left',color='red')
+    f10=plt.figtext(0.01,0.9,earth_text, fontsize=fsize, ha='left',color=earth_color)
+    f9=plt.figtext(0.01,0.86,mars_text, fontsize=fsize, ha='left',color=mars_color)
+    f8=plt.figtext(0.01,0.82,sta_text, fontsize=fsize, ha='left',color=sta_color)
     
 
     ######################## 1 plot all active CME circles
@@ -1358,8 +1786,8 @@ def make_frame3(k):
                 longcirc1.append(np.arctan2(yc1, xc1))
                 rcirc1.append(np.sqrt(xc1**2+yc1**2))
 
-            ax.plot(longcirc1[0],rcirc1[0], color='tab:blue', ls='-', alpha=1-abs(hc_lat1[cmeind1[0][p]]/100), lw=1.5) 
-            ax.fill_between(longcirc1[2], rcirc1[2], rcirc1[1], color='tab:blue', alpha=.05)
+            ax.plot(longcirc1[0],rcirc1[0], color=cme_color, ls='-', alpha=1-abs(hc_lat1[cmeind1[0][p]]/100), lw=1.5) 
+            ax.fill_between(longcirc1[2], rcirc1[2], rcirc1[1], color=cme_color, alpha=.05)
           
 
     #set axes and grid
@@ -1394,32 +1822,18 @@ def make_frame3(k):
     #f5=plt.figtext(0.45+0.13,0.93,frame_time_str[14:16], ha='center',color=backcolor,fontsize=fsize+6)
     
     f5=plt.figtext(0.45+0.14,0.93,'UTC', ha='center',color=backcolor,fontsize=fsize+6)
-    
-    plt.figtext(0.02, 0.12, 'created: '+ str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC', fontsize=fsize-3, ha='left', color=backcolor)
-    
-    plt.figtext(0.02, 0.14,'DONKI (CCMC) - kinematics: ELEvo', fontsize=fsize-1, ha='left',color='tab:blue')
-    
-    plt.figtext(0.02, 0.08,'Spacecraft trajectories '+frame+' 2D projection', fontsize=fsize-1, ha='left',color=backcolor)
-    
-    plt.figtext(0.86,0.08,r'---- trajectory from $-\,30$ days to $+\,30$ days', color='black', ha='center',fontsize=fsize-1)
-
-    #signature
-    
-    #BC MPO-MAG (IGEP/IWF/ISAS/IC)
-    #auch für Solar Orbiter (MAG, IC), Parker (FIELDS, UCB), STA (IMPACT/PLASTIC, UNH, UCLA), Wind (MFI, SWE, NASA??) STA-HI (RAL)
 
     plt.figtext(0.695,0.03,'Data sources: NOAA L1 RTSW, STEREO-A (IMPACT/PLASTIC, UNH, UCLA)', fontsize=fsize-2, ha='right',color=backcolor) 
 
-
-    
     #signature
     plt.figtext(0.02,0.01/2,r'Austrian Space Weather Office, GeoSphere Austria', fontsize=fsize-4, ha='left',color=backcolor) 
-    plt.figtext(0.99,0.01/2,'helioforecast.space', fontsize=fsize-4, ha='right',color=backcolor) 
+    plt.figtext(0.2,0.01/2,r'helioforecast.space', fontsize=fsize-4, ha='left',color=backcolor)
+    plt.figtext(0.99,0.01/2,'© GeoSphere Austria', fontsize=fsize-2, ha='right',color='#9AACAF') 
     
-    logo = plt.imread('/perm/aswo/eweiler/ELEvo/logo/GSA_Basislogo_Positiv_RGB_XXS.png')
-    newax = fig.add_axes([0.90,0.90,0.08,0.08], anchor='NE', zorder=1)
-    newax.imshow(logo)
-    newax.axis('off')        
+    #logo = plt.imread('/perm/aswo/eweiler/ELEvo/logo/GSA_Basislogo_Positiv_RGB_XXS.png')
+    #newax = fig.add_axes([0.90,0.90,0.08,0.08], anchor='NE', zorder=1)
+    #newax.imshow(logo)
+    #newax.axis('off')        
         
     categories = np.array([0, 2, 1, 1, 1, 2, 0, 0])
 
@@ -1435,12 +1849,7 @@ def make_frame3(k):
             r0=695000/AUkm
             r=v/omega*theta+r0*7
             ax.plot(-theta+np.deg2rad(0+(360/24.47)*res_in_days*k+360/12*q), r, alpha=0.1, lw=0.5,color='grey',zorder=2)
-    #print(theta)        
-   
-    #save figure
-    #date_today = datetime.now().strftime('%Y-%m-%d')
-    #filename_today=frames_path+'/frame_today/'+date_today+'.png' 
-    #plt.savefig(filename_today,dpi=200,facecolor=fig.get_facecolor(), edgecolor='none')
+            
 
     #save figure
     framestr = '%05i' % (k)  
@@ -1545,7 +1954,7 @@ while starttime < endtime:
 k_all=np.size(alltimes)
 
 #print(date_today_hour)
-days_window=3    #size of in situ timerange
+days_window=1    #size of in situ timerange
 
 if os.path.isdir(outputdirectory) == False: os.mkdir(outputdirectory)
 if os.path.isdir(animdirectory) == False: os.mkdir(animdirectory)
@@ -1587,9 +1996,10 @@ k_today = np.where(frame_time_num_list==mdates.date2num(datetime.now().replace(m
 
 #print(k_today)
 
-sns.set_context('talk')
-if not black: sns.set_style('darkgrid'),#{'grid.linestyle': ':', 'grid.color': '.35'}) 
-if black: sns.set_style('white',{'grid.linestyle': ':', 'grid.color': '.35'})   
+#sns.set_context('talk')
+if not black: sns.set_style('whitegrid')#, {'xtick.bottom': True, 'grid.color': 'gainsboro'}) #sns.set_style('darkgrid',{'edgecolor':'#9AACAF', 'grid.color': 'white'}),#{'grid.linestyle': ':', 'grid.color': '.35'}) 'grid.color': '#F4F4F4',
+if black: sns.set_style('white',{'figure.facecolor':'white', 'grid.color': '#F4F4F4', 'axes.edgecolor': '#9AACAF', 'axes.facecolor': 'white'})   
+sns.set_context('paper')
 
 # animation settings 
 
@@ -1662,8 +2072,8 @@ print('plots done, frames saved in ',outputdirectory)
 
 date_today = datetime.now().strftime('%Y-%m-%d')
 
-os.system(ffmpeg_path+'ffmpeg -r 40 -i '+str(outputdirectory)+'/pos_anim_%05d.jpg -b 5000k \
-    -r 40 '+str(animdirectory)+'all_movies/elevo_'+date_today+'.mp4 -y -loglevel warning') 
+os.system(ffmpeg_path+'ffmpeg -r 30 -i '+str(outputdirectory)+'/pos_anim_%05d.jpg -b 5000k \
+    -r 30 '+str(animdirectory)+'all_movies/elevo_'+date_today+'.mp4 -y -loglevel warning') 
 
 print('movie done, saved in ',animdirectory+'all_movies')
 
@@ -1688,11 +2098,15 @@ os.rename(os.path.join(animdirectory, 'elevo_'+date_today+'.mp4'), os.path.join(
 
 os.system('sort -n ' + arr_outputdirectory + '/icme_arrival_'+date_today_hours+'.txt > ' + movie_path + 'elevo_arrival_times.txt')
 os.system('sort -n ' + arr_outputdirectory + '/icme_arrival_solo_'+date_today_hours+'.txt > ' + movie_path + 'elevo_arrival_times_solo.txt')
+os.system('sort -n ' + arr_outputdirectory + '/icme_arrival_sta_'+date_today_hours+'.txt > ' + movie_path + 'elevo_arrival_times_sta.txt')
 
-fin = pd.read_csv(movie_path+'elevo_arrival_times.txt', skiprows=2, names=['ID', 'time 21.5 [UT, at 21.5 R_Sun]', 'lon [deg]', 'lat [deg]', 'initial speed [km/s]', 'arrival time [UTC]', 'error arrival time [h]', 'arrival speed [km/s]', 'error arrival speed [km/s]'], delimiter=' ')
+
+fin = pd.read_csv(movie_path+'elevo_arrival_times.txt', skiprows=2, names=['ID', 'time 21.5 [UT, at 21.5 R_Sun]', 'lon [deg]', 'lat [deg]', 'half width [deg]', 'initial speed [km/s]', 'arrival time [UTC]', 'error arrival time [h]', 'arrival speed [km/s]', 'error arrival speed [km/s]'], delimiter=' ')
 
 
-fin_solo = pd.read_csv(movie_path+'elevo_arrival_times_solo.txt', skiprows=2, names=['ID', 'time 21.5 [UT, at 21.5 R_Sun]', 'lon [deg]', 'lat [deg]', 'initial speed [km/s]', 'arrival time [UTC]', 'error arrival time [h]', 'arrival speed [km/s]', 'error arrival speed [km/s]'], delimiter=' ')
+fin_solo = pd.read_csv(movie_path+'elevo_arrival_times_solo.txt', skiprows=2, names=['ID', 'time 21.5 [UT, at 21.5 R_Sun]', 'lon [deg]', 'lat [deg]', 'half width [deg]', 'initial speed [km/s]', 'arrival time [UTC]', 'error arrival time [h]', 'arrival speed [km/s]', 'error arrival speed [km/s]'], delimiter=' ')
+
+fin_sta = pd.read_csv(movie_path+'elevo_arrival_times_sta.txt', skiprows=2, names=['ID', 'time 21.5 [UT, at 21.5 R_Sun]', 'lon [deg]', 'lat [deg]', 'half width [deg]', 'initial speed [km/s]', 'arrival time [UTC]', 'error arrival time [h]', 'arrival speed [km/s]', 'error arrival speed [km/s]'], delimiter=' ')
 
 
 fin['error arrival time [h]'] = '± '+fin['error arrival time [h]'].astype(str)
@@ -1701,9 +2115,13 @@ fin['error arrival speed [km/s]'] = '± '+fin['error arrival speed [km/s]'].asty
 fin_solo['error arrival time [h]'] = '± '+fin_solo['error arrival time [h]'].astype(str) 
 fin_solo['error arrival speed [km/s]'] = '± '+fin_solo['error arrival speed [km/s]'].astype(str)
 
+fin_sta['error arrival time [h]'] = '± '+fin_sta['error arrival time [h]'].astype(str) 
+fin_sta['error arrival speed [km/s]'] = '± '+fin_sta['error arrival speed [km/s]'].astype(str)
 
-header='ELEvo CME arrival times at Earth, Austrian Space Weather Office / GeoSphere Austria, created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n'
+
+header='ELEvo CME arrival times at L1, Austrian Space Weather Office / GeoSphere Austria, created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n'
 header_solo='ELEvo CME arrival times at Solar Orbiter, Austrian Space Weather Office / GeoSphere Austria, created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n'
+header_sta='ELEvo CME arrival times at STEREO-A, Austrian Space Weather Office / GeoSphere Austria, created ' + str(today.strftime('%A'))[0:3] + ' ' + date_today_minutes + ' UTC \n'
 
 file=movie_path+'ELEvo_header.txt'
 with open(file, "w") as text_file:
@@ -1729,6 +2147,18 @@ header_spaces_solo=header_solo.replace(" ", "&nbsp;")
 header_html_solo= "<p>" +header_spaces_solo.replace('\n', '<br>')+ "</p>" 
 print('header converted to HTML')
 
+file_sta_header=movie_path+'ELEvo_header_sta.txt'
+with open(file_sta_header, "w") as text_file:
+    text_file.write(header_sta)
+    #text_file.write(parameters) 
+print('header saved as '+file)
+   
+
+#Convert to html regarding line breaks, paragraph beginning and spaces
+header_spaces_sta=header_sta.replace(" ", "&nbsp;")
+header_html_sta= "<p>" +header_spaces_sta.replace('\n', '<br>')+ "</p>" 
+print('header converted to HTML')
+
 dfhtml = header_html
 dfhtml += fin.to_html()
 
@@ -1744,6 +2174,14 @@ dfhtml_solo += fin_solo.to_html()
 file_solo = movie_path+'elevo_arrival_times_solo.html'
 with open(file_solo,'w') as f:
     f.write(dfhtml_solo)
+    f.close()
+    
+dfhtml_sta = header_html_sta
+dfhtml_sta += fin_sta.to_html()
+
+file_sta = movie_path+'elevo_arrival_times_solo.html'
+with open(file_sta,'w') as f:
+    f.write(dfhtml_sta)
     f.close()
 
 

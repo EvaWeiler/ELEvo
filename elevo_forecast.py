@@ -1,26 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
-
 # 
 # ## In situ data and trajectories incl. Bepi Colombo, PSP, Solar Orbiter
 # https://github.com/cmoestl/heliocats
 # 
-# Author: C. Möstl, Austrian Space Weather Office, Geosphere Austria, https://helioforecast.space
-# 
-# twitter @chrisoutofspace, https://mastodon.social/@chrisoutofspace, https://github.com/cmoestl
-# 
-# last update: 2022 November 25
-# 
-# needs python 3.7 with the conda helio environment (see README.md)
-# 
-# uses heliopy for generating spacecraft positions, for data source files see README.md
-#     
+# Authors: C. Möstl, E. Weiler, Austrian Space Weather Office, Geosphere Austria, https://helioforecast.space
 # 
 
-# In[1]:
-
-
-#change path for ffmpeg for animation production if needed
+# last update: 2026 June 19
+# 
 
 ffmpeg_path=''
 

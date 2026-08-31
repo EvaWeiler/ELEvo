@@ -681,17 +681,17 @@ def donki_kinematics_new(i):
         index_list = []
 
         if not np.isnan(distance).all():
-            if label == 'earth':
-                for t in range(3):
-                    index = np.argmin(np.abs(np.ma.array(distance[:, t], mask=np.isnan(distance[:, t])) - obj))
-                    arr_time.append(time1[int(index)])
-                    index_list.append(index)
+            #if label == 'earth':
+            for t in range(3):
+                index = np.argmin(np.abs(np.ma.array(distance[:, t], mask=np.isnan(distance[:, t])) - obj))
+                arr_time.append(time1[int(index)])
+                index_list.append(index)
 
-            else:
-                for t in range(3):
-                    index = np.argmin(np.abs(distance[:,t] - obj))
-                    arr_time.append(time1[int(index)])
-                    index_list.append(index)
+#            else:
+#                for t in range(3):
+#                    index = np.argmin(np.abs(distance[:,t] - obj))
+#                    arr_time.append(time1[int(index)])
+#                    index_list.append(index)
 
             arr_speed = cme_v[:, 0][index_list[0]]
             err_arr_speed = cme_v[:, 2][index_list[2]] - cme_v[:, 1][index_list[1]]

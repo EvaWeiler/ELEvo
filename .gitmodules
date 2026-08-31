@@ -1,0 +1,3 @@
+[submodule "sc-data-functions"]
+	path = sc-data-functions
+	url = https://github.com/ee-davies/sc-data-functions

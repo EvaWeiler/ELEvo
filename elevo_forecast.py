@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
 # 
 # ## In situ data and trajectories incl. Bepi Colombo, PSP, Solar Orbiter
 # https://github.com/cmoestl/heliocats
@@ -12,50 +10,27 @@
 
 ffmpeg_path=''
 
+import copy
+import multiprocessing
 import os
-import datetime
+import pickle
+import shutil
+import time
+import urllib
+import warnings
 from datetime import datetime, timedelta
+
+import astropy.units as u
+import matplotlib
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+import multiprocess as mp
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from scipy.stats import norm
 from sunpy.time import parse_time
-import sunpy
-import astropy.units as u
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
-import itertools
 
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import spiceypy
-import pandas as pd
-from joblib import Parallel, delayed
-
-import matplotlib.cm as cmap
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
-
-from scipy.signal import medfilt
-import numpy as np
-import pdb
-import pickle
-import seaborn as sns
-import sys
-#import heliopy.data.spice as spicedata
-#import heliopy.spice as spice
-import astropy
-import importlib    
-import time
-import numba
-from numba import jit
-import multiprocessing
-import multiprocess as mp
-import urllib
-import copy
-from astropy import constants as const
-import astrospice
-import shutil
-
-import warnings
 warnings.filterwarnings('ignore')
 
 #from heliocats import data as hd

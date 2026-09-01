@@ -1,0 +1,14 @@
+[project]
+name = "elevo"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "astropy>=8.0.1",
+    "matplotlib>=3.11.1",
+    "multiprocess>=0.70.19",
+    "numpy>=2.4.6",
+    "pandas>=3.0.5",
+    "scipy>=1.17.1",
+    "seaborn>=0.13.2",
+    "sunpy>=7.0.5",
+]

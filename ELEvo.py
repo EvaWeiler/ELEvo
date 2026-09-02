@@ -1,11 +1,11 @@
-from datetime import datetime
+import datetime
 
 import numpy as np
 from scipy.stats import skewnorm
 
 
 class CME:
-    def __init__(self, half_width, longitude, latitude, tilt,f, initial_speed, initial_time, initial_radius, feature_type,source_of_info):
+    def __init__(self, half_width, longitude, latitude, tilt,f, initial_speed, initial_time, initial_radius, feature_type, source_of_info):
 
         ## These are the initial parameters for this CME, their values can be set and changed depending on source and case scenario
         self.half_width = half_width
@@ -31,6 +31,8 @@ class CME:
         # result radial distance and velocity of CME apex for all timesteps.
         self.cme_r_ensemble = None
         self.cme_v_ensemble = None
+        self.ensemble_timesteps = None
+        self.ensemble_time_resolution = None
 
         
 
@@ -129,6 +131,8 @@ def propagate_cme(gamma_array, ambient_wind_array,cme,days_duration=5,minute_res
 
     cme.cme_r_ensemble = cme_r_ensemble
     cme.cme_v_ensemble = cme_v_ensemble
+    cme.ensemble_timesteps = timesteps
+    cme.ensemble_time_resolution = minute_resolution
 
     return cme 
 
@@ -142,12 +146,18 @@ def calculate_ellipse_parameters(cme):
     cme_a = cme_b / cme.f
     cme_c = cme.cme_r_ensemble - cme_b
 
-    print(theta,omega,cme_b.shape,cme_a.shape,cme_c.shape)
+    cme.cme_a = cme_a
+    cme.cme_b = cme_b
+    cme.cme_c = cme_c
+    cme.theta = theta
+    cme.omega = omega
+
+    return cme
 
 
 
 if __name__ == "__main__":
-    cme = CME(45,0,0,0,0.7,450,datetime(2025,10,12,12,58),21.5,'SE','Dummy values')
+    cme = CME(45,0,0,0,0.7,450,datetime.datetime(2025,10,12,12,58),21.5,'SE','Dummy values')
 
     std_ensemble = {
         'sw': 50,

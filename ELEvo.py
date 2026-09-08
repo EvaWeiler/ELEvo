@@ -5,7 +5,7 @@ from scipy.stats import skewnorm
 
 
 class CME:
-    def __init__(self, half_width, longitude, latitude, tilt,f, initial_speed, initial_time, initial_radius, feature_type, source_of_info):
+    def __init__(self, half_width, longitude, latitude, tilt, f, initial_speed, initial_time, initial_radius, feature_type, source_of_info):
 
         ## These are the initial parameters for this CME, their values can be set and changed depending on source and case scenario
         self.half_width = half_width
@@ -114,14 +114,14 @@ def create_ensemble(swinit,gammainit,cme,std_ensemble,nb_ensemble=10000,random_s
     return gamma_array, ambient_wind_array, cme
 
 
-def propagate_cme(gamma_array, ambient_wind_array,cme,days_duration=5,minute_resolution=10):
+def propagate_cme(gamma_array, ambient_wind_array, cme, days_duration=5, minute_resolution=10):
 
-
-    timesteps = np.arange(days_duration*minute_resolution*60.0)
+    n_timesteps = int(days_duration * 24 * 60 / minute_resolution)
+    timesteps = np.arange(n_timesteps) * minute_resolution * 60.0
     timesteps = np.repeat(timesteps[None,:],repeats=cme.initial_radius_array.shape[0],axis=0)
     timesteps = np.transpose(timesteps)
 
-    distance0_list = cme.initial_radius_array
+    distance0_list = cme.initial_radius_array*695700 # convert to km from solar radii
     accsign = np.ones(distance0_list.shape)
     accsign[cme.initial_speed_array < ambient_wind_array] = -1.
     
@@ -163,8 +163,8 @@ if __name__ == "__main__":
         'sw': 50,
         'gamma': 0.025,
         'half_width' : 0, # this could be change to add more ensemble when reconstructing the CMEs /checking intersection
-        'longitude' : 0,# this could be change to add more ensemble when reconstructing the CMEs /checking intersection
-        'latitude' : 0,# this could be change to add more ensemble when reconstructing the CMEs /checking intersection
+        'longitude' : np.deg2rad(0),# this could be change to add more ensemble when reconstructing the CMEs /checking intersection
+        'latitude' : np.deg2rad(0),# this could be change to add more ensemble when reconstructing the CMEs /checking intersection
         'tilt' : 0,# this could be change to add more ensemble when reconstructing the CMEs /checking intersection
         'initial_speed' : 100,
         # 'initial_time' : 10, # I havent added that because would need to calculate ensemble for time, which is not straightforward 

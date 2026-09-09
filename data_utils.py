@@ -24,7 +24,7 @@ def cart_heeq_to_sphere(x,y,z):
     return r,phi,theta
 
 
-def convert_HEEQ_to_HEA(long,lat,radius,time_obs):
+def convert_HEEQ_to_HAE(long,lat,radius,time_obs):
     r_sun_in_au = const.R_sun.to(u.au)
     au_in_rsun = const.au.to(u.R_sun)
     long_radian = np.rad2deg(long)
@@ -53,7 +53,7 @@ def load_donki_cmes(path_json):
     for index, row in enumerate(donki_data):
         for analysis in row['cmeAnalyses']:
             if analysis['longitude'] is not None and analysis['latitude'] is not None:
-                long,lat,radius = convert_HEEQ_to_HEA(analysis['longitude'],analysis['latitude'],21.5,analysis['time21_5'])
+                long,lat,radius = convert_HEEQ_to_HAE(analysis['longitude'],analysis['latitude'],21.5,analysis['time21_5'])
                 cme = ELEvo.CME(analysis['halfAngle'],
                                 long,
                                 lat,

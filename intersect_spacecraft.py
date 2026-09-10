@@ -331,8 +331,9 @@ if __name__ == "__main__":
 
     earth_r = np.zeros(np.shape(cme.cme_r_ensemble)[0])
     earth_r[:] = 150*10**6
-    earth_lon = np.zeros(np.shape(cme.cme_r_ensemble)[0])
-    earth_lon[:] = np.deg2rad(0)
+    # earth_lon = np.zeros(np.shape(cme.cme_r_ensemble)[0])
+    earth_lon = np.linspace(0,45.0,np.shape(cme.cme_r_ensemble)[0])
+    earth_lon = np.deg2rad(earth_lon)
     earth_lat = np.zeros(np.shape(cme.cme_r_ensemble)[0])
     earth_timegrid = cme.ensemble_timesteps
     earth_time_resolution = cme.ensemble_time_resolution

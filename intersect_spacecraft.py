@@ -64,42 +64,58 @@ def convert_to_cartesian(longitude, latitude, radial_distance):
 
     return x, y, z
 
-def is_point_in_ellipsoid(space_obj_pos, ellipse_center, a, b, normal_vector):
-    """Check if a point is inside an ellipse.
+def project_to_ellipse_axes(space_obj_pos, ellipse_center, normal_base):
+    """Project a point onto the axes of an ellipse defined by its center and normal base.
 
     Parameters
     ----------
-    space_obj_pos : array-like
-        Cartesian coordinates of the space object to check. Dimension is (3, n_timesteps).
+    point : array-like
+        Cartesian coordinates of the point to project. Dimension is (3, n_timesteps).
     ellipse_center : array-like
         Cartesian coordinates of the ellipse center. Dimension is (3, n_timesteps, n_ensemble_members).
+    normal_base : array-like
+        Orthonormal base vectors defining the orientation of the ellipse. Dimension is (3, 3).
+
+    Returns
+    -------
+    projected_coords : array-like
+        Coordinates of the point projected onto the ellipse axes. Dimension is (3,).
+    """
+
+    relative_position = np.array(space_obj_pos)[:,:,None] - np.array(ellipse_center)
+
+    # einsum is used to compute the dot product for each timestep and ensemble member (i-dimension = 3, j-dimension = n_timesteps, k-dimension = n_ensemble_members)
+    component_along_x = np.einsum('ijk,i->jk', relative_position, normal_base[0])
+    component_along_y = np.einsum('ijk,i->jk', relative_position, normal_base[1])
+    component_along_z = np.einsum('ijk,i->jk', relative_position, normal_base[2])
+
+    
+    return component_along_x, component_along_y, component_along_z
+
+def is_point_in_ellipsoid(projected_points, a, b):
+    """Check if a point is inside an ellipse. This assumes that the point has already been projected onto the axes of the ellipse.
+    Only works for ellipses where b=c.
+
+    Parameters
+    ----------
+    projected_points : array-like
+        Coordinates of the point projected onto the ellipse axes. Dimension is (3, n_timesteps, n_ensemble_members).
     a : array-like
         Semi-major axis of the ellipse. Dimension is (n_timesteps, n_ensemble_members).
     b : array-like
         Semi-minor axis of the ellipse. Dimension is (n_timesteps, n_ensemble_members).
-    normal_vector : array-like
-        Normal vector to the plane of the ellipse. Dimension is (3,).
-
     Returns
     -------
     array-like
         Boolean array that is True where the point is inside the ellipse, False otherwise.
     """
 
-    # space_obj_pos has no ensemble axis; add one so it broadcasts against every ensemble member's center
-    point_relative_center = np.array(space_obj_pos)[:,:,None] - np.array(ellipse_center)
+    component_along_x, component_along_y, component_along_z = projected_points
 
-    # Computes distance along CME symmetry axis (x-axis)
-    # einsum is used to compute the dot product for each timestep and ensemble member (i-dimension = 3, j-dimension = n_timesteps, k-dimension = n_ensemble_members)
-    component_along_x = np.einsum('ijk,i->jk', point_relative_center, normal_vector)
+    return (component_along_x/a)**2 + (component_along_y/b)**2 + (component_along_z/b)**2 <= 1
 
-    point_relative_center_sq = (point_relative_center**2).sum(axis=0)
-    component_along_yz = point_relative_center_sq - component_along_x**2
-
-    return (component_along_x/a)**2 + component_along_yz/b**2 <= 1
-
-def cme_normal_vector(cme):
-    """Compute the normal vector to the CME plane in HAE coordinates.
+def cme_orthonormal_base(cme):
+    """Compute orthonormal base for CME coordinates.
 
     Parameters
     ----------
@@ -109,11 +125,11 @@ def cme_normal_vector(cme):
     Returns
     -------
     array-like
-        Normal vector to the CME plane. Dimension is (3,).
+        Set of vectors spanning an orthonormal base for the CME. Dimension is (3,3).
     """
 
     # Vector in the ecliptic plane, perpendicular to the CME's longitude direction
-    return np.array([-np.sin(cme.longitude), np.cos(cme.longitude), 0.0])
+    return np.array([-np.sin(cme.longitude), np.cos(cme.longitude), 0.0]), np.array([np.cos(cme.longitude), np.sin(cme.longitude), 0.0]), np.array([0.0, 0.0, 1.0])
 
 def calculate_intersection(cme, space_object):
     """Determine if a spacecraft is inside the CME ellipse at each timestep.
@@ -135,12 +151,13 @@ def calculate_intersection(cme, space_object):
     if not hasattr(cme, 'cme_a') or not hasattr(cme, 'cme_b') or not hasattr(cme, 'cme_c'):
         raise ValueError("CME ellipse parameters not calculated. Call calculate_ellipse_parameters(cme) first.")
 
-    normal_vector = cme_normal_vector(cme)
+    normal_base_vectors = cme_orthonormal_base(cme)
 
     sc_cartesian = convert_to_cartesian(space_object.longitude, space_object.latitude, space_object.radial_distance)
     cme_cartesian = convert_to_cartesian(cme.longitude, cme.latitude, cme.cme_c)
 
-    intersection_result = is_point_in_ellipsoid(sc_cartesian, cme_cartesian, cme.cme_a, cme.cme_b, normal_vector)
+    projected_sc_components = project_to_ellipse_axes(sc_cartesian, cme_cartesian, normal_base_vectors)
+    intersection_result = is_point_in_ellipsoid(projected_sc_components, cme.cme_a, cme.cme_b)
 
     return intersection_result
 
@@ -183,7 +200,7 @@ def calculate_time_intersection(intersection_result, timesteps, initial_time):
 
     return time_bounds
 
-def _ellipsoid_surface_points(center, a, b, normal_vector, n_theta=25, n_phi=25):
+def _ellipsoid_surface_points(center, a, b, normal_base, n_theta=25, n_phi=25):
     """Generate points on the surface of an ellipsoid defined by its center, semi-major axis a, semi-minor axis b, and normal vector.
 
     Parameters
@@ -194,8 +211,8 @@ def _ellipsoid_surface_points(center, a, b, normal_vector, n_theta=25, n_phi=25)
         Semi-major axis of the ellipsoid.
     b : float
         Semi-minor axis of the ellipsoid.
-    normal_vector : array-like
-        Normal vector to the plane of the ellipsoid. Dimension is (3,).
+    normal_base : array-like
+        Orthonormal base for the CME. Dimension is (3,3).
     n_theta : int
         Number of points along the polar angle (theta).
     n_phi : int
@@ -206,10 +223,7 @@ def _ellipsoid_surface_points(center, a, b, normal_vector, n_theta=25, n_phi=25)
     coords : list of array-like
         List containing the x, y, z coordinates of the ellipsoid surface points. Each array has shape (n_phi, n_theta).
     """
-    normal_vector = np.asarray(normal_vector, dtype=float)
-
-    w = np.array([0.0, 0.0, 1.0])
-    v = np.cross(normal_vector, w)
+    u, v , w = normal_base
 
     theta = np.linspace(0, np.pi, n_theta)
     phi = np.linspace(0, 2 * np.pi, n_phi)
@@ -222,7 +236,7 @@ def _ellipsoid_surface_points(center, a, b, normal_vector, n_theta=25, n_phi=25)
     for i in range(3):
         coords.append(
             center[i]
-            + axial * normal_vector[i]
+            + axial * u[i]
             + radial * (np.cos(phi) * w[i] + np.sin(phi) * v[i])
         )
     return coords
@@ -258,7 +272,7 @@ def plot_intersection_debug(cme, space_object, intersection_result, ensemble_idx
     if time_indices is None:
         time_indices = np.linspace(0, n_time - 1, n_snapshots, dtype=int)
 
-    normal_vector = cme_normal_vector(cme)
+    normal_base = cme_orthonormal_base(cme)
 
     sc_x, sc_y, sc_z = convert_to_cartesian(space_object.longitude, space_object.latitude, space_object.radial_distance)
 
@@ -271,7 +285,7 @@ def plot_intersection_debug(cme, space_object, intersection_result, ensemble_idx
         a = cme.cme_a[t, ensemble_idx]
         b = cme.cme_b[t, ensemble_idx]
 
-        x, y, z = _ellipsoid_surface_points(center, a, b, normal_vector)
+        x, y, z = _ellipsoid_surface_points(center, a, b, normal_base)
         ax.plot_surface(x, y, z, color='tab:orange', alpha=0.25, linewidth=0)
 
         ax.plot([0, center[0]], [0, center[1]], [0, center[2]], 'k--', linewidth=0.8)

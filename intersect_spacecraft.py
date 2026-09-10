@@ -72,11 +72,11 @@ def is_point_in_ellipsoid(space_obj_pos, ellipse_center, a, b, normal_vector):
     space_obj_pos : array-like
         Cartesian coordinates of the space object to check. Dimension is (3, n_timesteps).
     ellipse_center : array-like
-        Cartesian coordinates of the ellipse center. Dimension is (3, n_ensemble_members, n_timesteps).
+        Cartesian coordinates of the ellipse center. Dimension is (3, n_timesteps, n_ensemble_members).
     a : array-like
-        Semi-major axis of the ellipse. Dimension is (n_ensemble_members, n_timesteps).
+        Semi-major axis of the ellipse. Dimension is (n_timesteps, n_ensemble_members).
     b : array-like
-        Semi-minor axis of the ellipse. Dimension is (n_ensemble_members, n_timesteps).
+        Semi-minor axis of the ellipse. Dimension is (n_timesteps, n_ensemble_members).
     normal_vector : array-like
         Normal vector to the plane of the ellipse. Dimension is (3,).
 
@@ -89,7 +89,8 @@ def is_point_in_ellipsoid(space_obj_pos, ellipse_center, a, b, normal_vector):
     # space_obj_pos has no ensemble axis; add one so it broadcasts against every ensemble member's center
     point_relative_center = np.array(space_obj_pos)[:,:,None] - np.array(ellipse_center)
 
-    # Distance along the CME's symmetry axis vs. perpendicular to it, per the ellipse equation
+    # Computes distance along CME symmetry axis (x-axis)
+    # einsum is used to compute the dot product for each timestep and ensemble member (i-dimension = 3, j-dimension = n_timesteps, k-dimension = n_ensemble_members)
     component_along_x = np.einsum('ijk,i->jk', point_relative_center, normal_vector)
 
     point_relative_center_sq = (point_relative_center**2).sum(axis=0)
@@ -145,9 +146,7 @@ def calculate_intersection(cme, space_object):
 
 def calculate_time_intersection(intersection_result, timesteps, initial_time):
     """For each ensemble member, return the first and last times where the
-    spacecraft is inside the CME, or (None, None) if it never is. If the
-    spacecraft is inside at multiple disjoint intervals, return only the first
-    interval.
+    spacecraft is inside the CME, or (None, None) if it never is.
 
     Parameters
     ----------

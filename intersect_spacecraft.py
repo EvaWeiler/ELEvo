@@ -88,7 +88,6 @@ def project_to_ellipse_axes(space_obj_pos, ellipse_center, normal_base):
     component_along_x = np.einsum('ijk,i->jk', relative_position, normal_base[0])
     component_along_y = np.einsum('ijk,i->jk', relative_position, normal_base[1])
     component_along_z = np.einsum('ijk,i->jk', relative_position, normal_base[2])
-
     
     return component_along_x, component_along_y, component_along_z
 
@@ -120,7 +119,7 @@ def cme_orthonormal_base(cme):
     Parameters
     ----------
     cme : CME
-        The CME object containing the longitude.
+        The CME object containing the longitude and latitude.
 
     Returns
     -------
@@ -128,8 +127,16 @@ def cme_orthonormal_base(cme):
         Set of vectors spanning an orthonormal base for the CME. Dimension is (3,3).
     """
 
+    lon, lat = cme.longitude, cme.latitude
+
+    # Radial direction from the Sun towards the CME apex
+    u_r = np.array([np.cos(lat)*np.cos(lon), np.cos(lat)*np.sin(lon), np.sin(lat)])
     # Vector in the ecliptic plane, perpendicular to the CME's longitude direction
-    return np.array([-np.sin(cme.longitude), np.cos(cme.longitude), 0.0]), np.array([np.cos(cme.longitude), np.sin(cme.longitude), 0.0]), np.array([0.0, 0.0, 1.0])
+    e_lon = np.array([-np.sin(lon), np.cos(lon), 0.0])
+    # Vector perpendicular to both, tilted out of the ecliptic plane by the CME's latitude
+    e_lat = np.array([-np.sin(lat)*np.cos(lon), -np.sin(lat)*np.sin(lon), np.cos(lat)])
+
+    return e_lon, u_r, e_lat
 
 def calculate_intersection(cme, space_object):
     """Determine if a spacecraft is inside the CME ellipse at each timestep.
@@ -299,7 +306,7 @@ def _ellipsoid_surface_points(center, a, b, normal_base, n_theta=25, n_phi=25):
     coords : list of array-like
         List containing the x, y, z coordinates of the ellipsoid surface points. Each array has shape (n_phi, n_theta).
     """
-    u, v , w = normal_base
+    u, v ,w = normal_base
 
     theta = np.linspace(0, np.pi, n_theta)
     phi = np.linspace(0, 2 * np.pi, n_phi)

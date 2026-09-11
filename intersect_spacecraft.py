@@ -161,44 +161,120 @@ def calculate_intersection(cme, space_object):
 
     return intersection_result
 
-def calculate_time_intersection(intersection_result, timesteps, initial_time):
-    """For each ensemble member, return the first and last times where the
-    spacecraft is inside the CME, or (None, None) if it never is.
+def get_boundary_indices(intersection_result):
+    """For each ensemble member, find the timestep indices bracketing the first and last
+    intersection with the CME, i.e. the timestep just before the first crossing, the first crossing,
+    the last crossing, and the timestep just after the last crossing. Ensemble members that never
+    intersect the CME get (None, None, None, None).
 
     Parameters
     ----------
     intersection_result : array-like
         Boolean array that is True where the spacecraft is inside the CME ellipse, False otherwise. Has shape (n_timesteps, n_ensemble_members).
+
+    Returns
+    -------
+    array-like
+        Object array of shape (4, n_ensemble_members): [before_first, first, last, after_last] timestep indices, or None in all four rows for ensemble members that never intersect the CME.
+    """
+
+    n_timesteps = intersection_result.shape[0]
+    has_any = intersection_result.any(axis=0)
+
+    first_idx = intersection_result.argmax(axis=0)
+    last_idx = n_timesteps - 1 - intersection_result[::-1].argmax(axis=0)
+
+    before_first_idx = np.maximum(first_idx - 1, 0)
+    after_last_idx = np.minimum(last_idx + 1, n_timesteps - 1)
+
+    boundary_idx = np.stack([before_first_idx, first_idx, last_idx, after_last_idx]).astype(object)
+    boundary_idx[:, ~has_any] = None
+
+    return boundary_idx
+
+def offsets_from_seconds(seconds):
+    """Convert an array of seconds into microsecond-precision numpy timedeltas.
+
+    Parameters
+    ----------
+    seconds : array-like
+        Seconds to convert.
+
+    Returns
+    -------
+    array-like
+        Array of dtype timedelta64[us], same shape as the input.
+    """
+
+    return np.round(seconds * 1e6).astype('int64').astype('timedelta64[us]')
+
+def average_boundary_values(bound_idx_pair, values):
+    """Average a per-timestep array at two boundary timestep indices, for each ensemble member.
+
+    Parameters
+    ----------
+    bound_idx_pair : array-like
+        Two rows of timestep indices, shape (2, n_ensemble_members), as returned by (a slice of)
+        get_boundary_indices. None in both rows means no intersection for that ensemble member.
+    values : array-like
+        Per-timestep data to average, e.g. seconds-since-initial_time or CME speed. Shape
+        (n_timesteps, n_ensemble_members).
+
+    Returns
+    -------
+    array-like
+        Object array of shape (n_ensemble_members,): the average of values at the two boundary
+        indices, or None for ensemble members with no intersection.
+    """
+
+    n_ensemble = bound_idx_pair.shape[1]
+    ensemble_idx = np.arange(n_ensemble)
+    has_any = bound_idx_pair[0] != None
+
+    valid_idx = bound_idx_pair[:, has_any].astype(int)
+    boundary_values = values[valid_idx, ensemble_idx[has_any]]
+
+    averages = np.full(n_ensemble, None, dtype=object)
+    averages[has_any] = boundary_values.mean(axis=0)
+
+    return averages
+
+def calculate_arrival(bound_idx, timesteps, speeds, initial_time):
+    """For each ensemble member, compute the arrival time and arrival speed at the CME boundary:
+    the average of the timestep just before the first crossing into the CME and the first
+    crossing itself. Returns None for ensemble members that never intersect the CME.
+
+    Parameters
+    ----------
+    bound_idx : array-like
+        Boundary timestep indices as returned by get_boundary_indices, shape (4, n_ensemble_members).
+        Only the first two rows (before_first, first) are used.
     timesteps : array-like
         Time grid associated with the position values, given in seconds since initial_time. Has shape (n_timesteps, n_ensemble_members).
+    speeds : array-like
+        CME speed at each timestep and ensemble member. Has shape (n_timesteps, n_ensemble_members).
     initial_time : datetime.datetime
         The initial time of the CME corresponding to the first timestep.
 
     Returns
     -------
-    time_bounds : array-like
-        Array of shape (n_ensemble_members, 2) where each row contains the first and last times (as datetime objects) where the spacecraft is inside the CME, or (None, None) if it never is.
+    arrival_times : array-like
+        Object array of shape (n_ensemble_members,): arrival time as a datetime object, or None.
+    arrival_speeds : array-like
+        Object array of shape (n_ensemble_members,): arrival speed, or None.
     """
 
-    n_ensemble = intersection_result.shape[1]
-    ensemble_idx = np.arange(n_ensemble)
-    has_any = intersection_result.any(axis=0)
+    arrival_seconds = average_boundary_values(bound_idx[:2], timesteps)
+    arrival_speeds = average_boundary_values(bound_idx[:2], speeds)
 
-    first_idx = intersection_result.argmax(axis=0)
-    last_idx = intersection_result.shape[0] - 1 - intersection_result[::-1].argmax(axis=0)
-
-    first_seconds = timesteps[first_idx, ensemble_idx][has_any]
-    last_seconds = timesteps[last_idx, ensemble_idx][has_any]
-
+    has_any = arrival_seconds != None
     base_time = np.datetime64(initial_time)
-    first_offsets = np.round(first_seconds * 1e6).astype('int64').astype('timedelta64[us]')
-    last_offsets = np.round(last_seconds * 1e6).astype('int64').astype('timedelta64[us]')
+    arrival_offsets = offsets_from_seconds(arrival_seconds[has_any].astype(float))
 
-    time_bounds = np.full((n_ensemble, 2), None, dtype=object)
-    time_bounds[has_any, 0] = (base_time + first_offsets).astype('datetime64[us]').astype(object)
-    time_bounds[has_any, 1] = (base_time + last_offsets).astype('datetime64[us]').astype(object)
+    arrival_times = np.full(len(arrival_seconds), None, dtype=object)
+    arrival_times[has_any] = (base_time + arrival_offsets).astype('datetime64[us]').astype(object)
 
-    return time_bounds
+    return arrival_times, arrival_speeds
 
 def _ellipsoid_surface_points(center, a, b, normal_base, n_theta=25, n_phi=25):
     """Generate points on the surface of an ellipsoid defined by its center, semi-major axis a, semi-minor axis b, and normal vector.
@@ -354,12 +430,14 @@ if __name__ == "__main__":
     earth_object = SpaceObject('Earth', earth_lon, earth_lat, earth_r, 'HAE', cme.initial_time, timesteps=earth_timegrid, time_resolution=earth_time_resolution)
 
     intersection = calculate_intersection(cme, earth_object)
-    time_bounds = calculate_time_intersection(intersection, cme.ensemble_timesteps, cme.initial_time)
+    bound_idxs = get_boundary_indices(intersection)
+    arrival_times, arrival_speeds = calculate_arrival(bound_idxs, cme.ensemble_timesteps, cme.cme_v_ensemble, cme.initial_time)
     debug_ensemble_idx = -1
+
     # compute how many ensemble members evetually arrive at earth
-    n_arrival = np.sum(time_bounds[:,0] != None)
-    print(f"Number of ensemble members that arrive at Earth: {n_arrival} / {time_bounds.shape[0]} ({n_arrival/time_bounds.shape[0]*100:.2f}%)")
-    time_bounds = time_bounds[debug_ensemble_idx]
-    print(f"Ensemble member {debug_ensemble_idx} first inside index: {time_bounds[0]}, last inside index: {time_bounds[1]}")
+    n_arrival = np.sum(bound_idxs[0] != None)
+    print(f"Number of ensemble members that arrive at Earth: {n_arrival} / {bound_idxs.shape[1]} ({n_arrival/bound_idxs.shape[1]*100:.2f}%)")
+    print(f"Ensemble member {debug_ensemble_idx} arrival time: {arrival_times[debug_ensemble_idx]}")
+    print(f"Ensemble member {debug_ensemble_idx} arrival speed: {arrival_speeds[debug_ensemble_idx]} km/s")
     plot_intersection_debug(cme, earth_object, intersection, ensemble_idx=debug_ensemble_idx)
     plt.show()

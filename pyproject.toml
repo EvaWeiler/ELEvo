@@ -16,3 +16,7 @@ dependencies = [
     "spiceypy>=8.2.0",
     "sunpy>=7.0.5",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

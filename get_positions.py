@@ -126,10 +126,10 @@ def get_planets_positions(planets, time_series, coord_sys):
 
 
 if __name__ == "__main__":
-    sc_list = 'solo'
+    sc_list = ['solo', 'psp', 'sta']
     planets_list = ['mercury','venus','earth','mars barycenter','jupiter barycenter','saturn barycenter','uranus barycenter','neptune barycenter'] 
     coord_system = 'ECLIPJ2000'
-    res_in_min = 1.
+    res_in_min = 10.
     time_in_min_res = [datetime(2026,1,19,0)+timedelta(minutes=res_in_min*n) for n in range(100)]
 
     pos_planet = get_planets_positions(planets=planets_list, time_series=time_in_min_res, coord_sys=coord_system)

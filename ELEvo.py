@@ -122,7 +122,7 @@ def propagate_cme(gamma_array, ambient_wind_array, cme, days_duration=5, minute_
     timesteps = np.repeat(timesteps[None,:],repeats=cme.initial_radius_array.shape[0],axis=0)
     timesteps = np.transpose(timesteps)
 
-    distance0_list = cme.initial_radius_array*u.R_sun.to(u.km).value # 695700 # convert to km from solar radii
+    distance0_list = cme.initial_radius_array*u.R_sun.to(u.km) # 695700 # convert to km from solar radii
     accsign = np.ones(distance0_list.shape)
     accsign[cme.initial_speed_array < ambient_wind_array] = -1.
     

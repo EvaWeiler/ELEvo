@@ -276,9 +276,9 @@ def load_positions_jpl(data_path, date_start,date_end,step, space_obj):
     pos = pos[space_obj]
     
     time_array = pos['time']
-    r_array = pos['r']
-    lon_array = pos['lon']
-    lat_array = pos['lat']
+    r_array    = pos['r']
+    lon_array  = pos['lon']
+    lat_array  = pos['lat']
     x_array = pos['x']
     y_array = pos['y']
     z_array = pos['z']

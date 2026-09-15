@@ -2,18 +2,16 @@ from CME_class import *
 from space_object_class import *
 import elevo_utils
 import data_utils
-import matplotlib.pyplot as plt 
-
+import plot_utils
 
 def Run_one_CME(names):
 
     resolution = '10m'
-    nb_ensemble = 7000
+    nb_ensemble = 10000
     days_duration = 5
     time_resolution = 10
 
-    cme = CME(45,157,-10,0,0.7,450,datetime.datetime(2025,2,10,12,58),21.5,'SE','Dummy values')
-    print(cme.longitude,cme.latitude)
+    cme = CME(np.deg2rad(45),np.deg2rad(157),np.deg2rad(-10),0,0.7,450,datetime.datetime(2025,2,10,12,58),21.5,'SE','Dummy values')
 
     start_date = "2025-02-10"
     end_date = "2025-02-15"
@@ -21,8 +19,8 @@ def Run_one_CME(names):
 
     for name in names:                 
         data_utils.create_positions_file(name,start_date,end_date,step=resolution,save_path='data/spc_pos/',overwrite=False)
-        positons_dict = data_utils.load_positions_jpl('data/spc_pos/', start_date,end_date,resolution, name)
-        spcs.append(SpaceObject(name, positons_dict['lon'], positons_dict['lat'], positons_dict['r'], 'HAE', cme.initial_time, timesteps=cme.ensemble_timesteps, time_resolution=time_resolution))
+        positions_dict = data_utils.load_positions_jpl('data/spc_pos/', start_date,end_date,resolution, name)
+        spcs.append(SpaceObject(name, positions_dict['lon'], positions_dict['lat'], positions_dict['r'], 'HAE', cme.initial_time, timesteps=cme.ensemble_timesteps, time_resolution=time_resolution))
 
     
 
@@ -43,7 +41,7 @@ def Run_one_CME(names):
     cme.calculate_ellipse_parameters()
 
     
-
+    plot_utils.plot_spcs_cmepropagation(spcs,cme)
 
     for spc in spcs:
 

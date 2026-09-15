@@ -16,6 +16,7 @@ import pickle
 import re
 
 
+
 def sphere_to_cart_heeq(r, lat_rad, lon_rad):
     x = r * np.cos(lat_rad) * np.cos(lon_rad)
     y = r * np.cos(lat_rad) * np.sin(lon_rad)
@@ -214,11 +215,11 @@ def create_positions_file(space_obj,start,stop,step='10min',save_path='',overwri
           
             # remove leap seconds because datetime is not comaptible with them
             obj_time.extend([datetime.strptime(coord[i].obstime.strftime('%Y-%m-%d %H:%M'+':00'), '%Y-%m-%d %H:%M:%S') for i in range(len(coord))])#obj_time.extend(coord.obstime.to_datetime())
-            obj_r.extend(coord.distance.value)
+            obj_r.extend(coord.distance.value * u.au.to(u.km) )
             obj_lon.extend(np.deg2rad(coord.lon.value))
             obj_lat.extend(np.deg2rad(coord.lat.value))
 
-            x,y,z = elevo_utils.convert_to_cartesian(np.deg2rad(np.array(coord.lon.value)),np.deg2rad(np.array(coord.lat.value)), np.array(coord.distance.value) )
+            x,y,z = elevo_utils.convert_to_cartesian(np.deg2rad(np.array(coord.lon.value)),np.deg2rad(np.array(coord.lat.value)), np.array(coord.distance.value * u.au.to(u.km) ) )
             obj_x.extend(x)
             obj_y.extend(y)
             obj_z.extend(z)
@@ -236,11 +237,11 @@ def create_positions_file(space_obj,start,stop,step='10min',save_path='',overwri
             
             # remove leap seconds because datetime is not comaptible with them
             obj_time = [datetime.strptime(coord[i].obstime.strftime('%Y-%m-%d %H:%M')+':00', '%Y-%m-%d %H:%M:%S') for i in range(len(coord))]
-            obj_r = coord.distance.value
+            obj_r = coord.distance.value * u.au.to(u.km) 
             obj_lon = np.deg2rad(coord.lon.value)
             obj_lat = np.deg2rad(coord.lat.value)
 
-            x,y,z = elevo_utils.convert_to_cartesian(  obj_lon,obj_lat,np.array(coord.distance.value) )
+            x,y,z = elevo_utils.convert_to_cartesian(  obj_lon,obj_lat,np.array(coord.distance.value* u.au.to(u.km)  ) )
             obj_x = x
             obj_y = y
             obj_z = z
@@ -266,23 +267,26 @@ def create_positions_file(space_obj,start,stop,step='10min',save_path='',overwri
         pickle.dump(coord_dict, f)
 
 
+def load_positions_jpl(data_path, date_start,date_end,step, space_obj):
+
+    file_path =  data_path+space_obj+"_"+step+"_"+date_start+"_"+date_end+'_HAE.pkl'
+    with open(file_path, "rb") as f:
+        pos = pickle.load(f)
+
+    pos = pos[space_obj]
+    
+    time_array = pos['time']
+    r_array = pos['r']
+    lon_array = pos['lon']
+    lat_array = pos['lat']
+    x_array = pos['x']
+    y_array = pos['y']
+    z_array = pos['z']
+
+
+    return {'time': time_array.flatten(), 'r': r_array.flatten(), 'lon': lon_array.flatten(), 'lat': lat_array.flatten(), 'x': x_array.flatten(), 'y': y_array.flatten(), 'z': z_array.flatten()}
 
 if __name__ == "__main__":
     download_donki_cmes(datetime(2026,1,12),datetime(2026,1,17))
-    print(len(load_donki_cmes('data/donki_data.json')))
 
-    names = ['l1',
-            'solo',
-            'psp',
-            'sta',
-            'bepi',
-            'mercury',
-            'venus',
-            'mars']
     
-    resolution = '10m'
-    start_date = "2025-02-10"
-    end_date = "2025-02-15"
-
-    for name in names:                 
-        create_positions_file(name,start_date,end_date,step=resolution,save_path='data/spc_pos/')

@@ -60,7 +60,7 @@ def skewed_distribution(cme_speed,n_ensemble):
 
 def create_time_grid(nb_ensembles,days_duration,minute_resolution):
     n_timesteps = int(days_duration * 24 * 60 / minute_resolution)
-    timesteps = np.arange(n_timesteps) * minute_resolution * 60.0
+    timesteps = np.arange(n_timesteps+1) * minute_resolution * 60.0
     timesteps = np.repeat(timesteps[None,:],repeats=nb_ensembles,axis=0)
     timesteps = np.transpose(timesteps)
     return timesteps

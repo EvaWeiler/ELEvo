@@ -3,16 +3,9 @@ import datetime
 import numpy as np
 import pytest
 
-from ELEvo import CME
-from intersect_spacecraft import (
-    SpaceObject,
-    calculate_intersection,
-    cme_orthonormal_base,
-    convert_to_cartesian,
-    get_boundary_indices,
-    is_point_in_ellipsoid,
-    project_to_ellipse_axes,
-)
+from CME_class import CME
+from elevo_utils import  calculate_arrival,get_boundary_indices,convert_to_cartesian,project_to_ellipse_axes,is_point_in_ellipsoid
+from Space_object_class import SpaceObject
 
 
 def make_cme(longitude=0.0, latitude=0.0, cme_a=None, cme_b=None, cme_c=None):
@@ -64,7 +57,7 @@ class TestCmeOrthonormalBase:
     def test_orthonormal(self, lon_deg, lat_deg):
         # tests if base is actually orthonormal: each vector has unit length and is perpendicular to the others
         cme = make_cme(longitude=np.deg2rad(lon_deg), latitude=np.deg2rad(lat_deg))
-        vectors = cme_orthonormal_base(cme)
+        vectors = cme.cme_orthonormal_base()
         for v in vectors:
             np.testing.assert_allclose(np.linalg.norm(v), 1.0, atol=1e-10)
         for i in range(3):
@@ -76,7 +69,7 @@ class TestProjectToEllipseAxes:
     def test_shape_and_broadcast_multiple_timesteps_and_ensemble(self):
         # tests if the output shape and dot product with the base vectors is correct for multiple timesteps and ensemble members
         cme = make_cme(longitude=np.deg2rad(30))
-        normal_base = cme_orthonormal_base(cme)
+        normal_base = cme.cme_orthonormal_base()
         n_t, n_ens = 2, 3
         rng = np.random.default_rng(0)
         center = rng.normal(size=(3, n_t, n_ens))
@@ -109,7 +102,7 @@ class TestCalculateIntersection:
             'HAE', cme.initial_time, np.array([0.0]), 10.0,
         )
         with pytest.raises(ValueError):
-            calculate_intersection(cme, space_object)
+            space_object.calculate_intersection(cme)
 
 class TestGetBoundaryIndices:
     def test_never_always_and_normal_entry_columns(self):

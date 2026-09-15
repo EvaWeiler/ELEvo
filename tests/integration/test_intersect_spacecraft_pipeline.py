@@ -3,13 +3,9 @@ import datetime
 import numpy as np
 import pytest
 
-from ELEvo import CME, calculate_ellipse_parameters, create_ensemble, propagate_cme
-from intersect_spacecraft import (
-    SpaceObject,
-    calculate_arrival,
-    calculate_intersection,
-    get_boundary_indices,
-)
+from CME_class import CME
+from elevo_utils import  calculate_arrival,get_boundary_indices
+from Space_object_class import SpaceObject
 
 
 def build_cme(half_width=45., longitude=0.0, latitude=0.0, tilt=0.0, f=0.7, initial_speed=850, initial_time=datetime.datetime(2025, 10, 12, 12, 58), initial_radius=21.5):
@@ -36,11 +32,11 @@ ZERO_STD_ENSEMBLE = dict.fromkeys(DEFAULT_STD_ENSEMBLE, 0)
 
 def run_pipeline(cme, spacecraft_longitude_deg, spacecraft_latitude_deg, nb_ensemble=20, days_duration=14, std_ensemble=DEFAULT_STD_ENSEMBLE):
 
-    gamma_array, ambient_wind_array, cme = create_ensemble(
-        400, 0.2, cme, std_ensemble, nb_ensemble=nb_ensemble, random_seed=42, method_type='normal',
+    cme.initialize_ensemble(
+        400, 0.2, std_ensemble, nb_ensemble=nb_ensemble, random_seed=42, method_type='normal',
     )
-    cme = propagate_cme(gamma_array, ambient_wind_array, cme, days_duration=days_duration, minute_resolution=10)
-    cme = calculate_ellipse_parameters(cme)
+    cme.propagate_cme()
+    cme.calculate_ellipse_parameters()
 
     n_time = cme.cme_r_ensemble.shape[0]
     sc_lon = np.full(n_time, np.deg2rad(spacecraft_longitude_deg))
@@ -52,7 +48,8 @@ def run_pipeline(cme, spacecraft_longitude_deg, spacecraft_latitude_deg, nb_ense
         timesteps=cme.ensemble_timesteps, time_resolution=cme.ensemble_time_resolution,
     )
 
-    intersection = calculate_intersection(cme, space_object)
+    intersection = space_object.calculate_intersection(cme)
+
     bound_idxs = get_boundary_indices(intersection)
     arrival_times, arrival_speeds = calculate_arrival(
         bound_idxs, cme.ensemble_timesteps, cme.cme_v_ensemble, cme.initial_time,

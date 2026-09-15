@@ -5,10 +5,10 @@ import data_utils
 import matplotlib.pyplot as plt 
 
 
-def Run_one_CME(names_spcs):
+def Run_one_CME(names):
 
     resolution = '10m'
-    nb_ensemble = 500
+    nb_ensemble = 7000
     days_duration = 5
     time_resolution = 10
 
@@ -38,7 +38,7 @@ def Run_one_CME(names_spcs):
             'initial_radius' : 2,
                 
         }
-    cme.initialize_ensemble(400,1.0e-7,std_ensemble,nb_ensemble=nb_ensemble,method_type='skewed')
+    cme.initialize_ensemble(400,1.0e-7,std_ensemble,nb_ensemble=nb_ensemble,method_type='skewed',days_duration=days_duration)
     cme.propagate_cme()
     cme.calculate_ellipse_parameters()
 

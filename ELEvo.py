@@ -51,6 +51,9 @@ def Run_one_CME(names):
         bound_idxs = elevo_utils.get_boundary_indices(intersection)
         arrival_times, arrival_speeds = elevo_utils.calculate_arrival(bound_idxs, cme.ensemble_timesteps, cme.cme_v_ensemble, cme.initial_time)
         debug_ensemble_idx = -1
+
+        # plot_utils.plot_intersection_debug(cme,spc,intersection,100)
+        
         
         # compute how many ensemble members evetually arrive at earth
         n_arrival = np.sum(bound_idxs[0] != None)

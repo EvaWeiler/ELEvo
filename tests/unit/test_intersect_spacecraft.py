@@ -5,7 +5,7 @@ import pytest
 
 from CME_class import CME
 from elevo_utils import  calculate_arrival,get_boundary_indices,convert_to_cartesian,project_to_ellipse_axes,is_point_in_ellipsoid
-from Space_object_class import SpaceObject
+from space_object_class import SpaceObject
 
 
 def make_cme(longitude=0.0, latitude=0.0, cme_a=None, cme_b=None, cme_c=None):

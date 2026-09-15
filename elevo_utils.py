@@ -113,31 +113,31 @@ def is_point_in_ellipsoid(projected_points, a, b):
     return (component_along_x/a)**2 + (component_along_y/b)**2 + (component_along_z/b)**2 <= 1
 
 def project_to_ellipse_axes(space_obj_pos, ellipse_center, normal_base):
-        """Project a point onto the axes of an ellipse defined by its center and normal base.
+    """Project a point onto the axes of an ellipse defined by its center and normal base.
 
-        Parameters
-        ----------
-        point : array-like
-            Cartesian coordinates of the point to project. Dimension is (3, n_timesteps).
-        ellipse_center : array-like
-            Cartesian coordinates of the ellipse center. Dimension is (3, n_timesteps, n_ensemble_members).
-        normal_base : array-like
-            Orthonormal base vectors defining the orientation of the ellipse. Dimension is (3, 3).
+    Parameters
+    ----------
+    point : array-like
+        Cartesian coordinates of the point to project. Dimension is (3, n_timesteps).
+    ellipse_center : array-like
+        Cartesian coordinates of the ellipse center. Dimension is (3, n_timesteps, n_ensemble_members).
+    normal_base : array-like
+        Orthonormal base vectors defining the orientation of the ellipse. Dimension is (3, 3).
 
-        Returns
-        -------
-        projected_coords : array-like
-            Coordinates of the point projected onto the ellipse axes. Dimension is (3,).
-        """
+    Returns
+    -------
+    projected_coords : array-like
+        Coordinates of the point projected onto the ellipse axes. Dimension is (3,).
+    """
 
-        relative_position = np.array(space_obj_pos)[:,:,None] - np.array(ellipse_center)
+    relative_position = np.array(space_obj_pos)[:,:,None] - np.array(ellipse_center)
 
-        # einsum is used to compute the dot product for each timestep and ensemble member (i-dimension = 3, j-dimension = n_timesteps, k-dimension = n_ensemble_members)
-        component_along_x = np.einsum('ijk,i->jk', relative_position, normal_base[0])
-        component_along_y = np.einsum('ijk,i->jk', relative_position, normal_base[1])
-        component_along_z = np.einsum('ijk,i->jk', relative_position, normal_base[2])
-        
-        return component_along_x, component_along_y, component_along_z
+    # einsum is used to compute the dot product for each timestep and ensemble member (i-dimension = 3, j-dimension = n_timesteps, k-dimension = n_ensemble_members)
+    component_along_x = np.einsum('ijk,i->jk', relative_position, normal_base[0])
+    component_along_y = np.einsum('ijk,i->jk', relative_position, normal_base[1])
+    component_along_z = np.einsum('ijk,i->jk', relative_position, normal_base[2])
+    
+    return component_along_x, component_along_y, component_along_z
 
 def get_boundary_indices(intersection_result):
     """For each ensemble member, find the timestep indices bracketing the first and last

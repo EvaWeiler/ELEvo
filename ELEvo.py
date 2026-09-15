@@ -1,5 +1,5 @@
 from CME_class import * 
-from Space_object_class import *
+from space_object_class import *
 import elevo_utils
 
 def Run_one_CME():

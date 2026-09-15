@@ -5,7 +5,7 @@ import pytest
 
 from CME_class import CME
 from elevo_utils import  calculate_arrival,get_boundary_indices
-from Space_object_class import SpaceObject
+from space_object_class import SpaceObject
 
 
 def build_cme(half_width=45., longitude=0.0, latitude=0.0, tilt=0.0, f=0.7, initial_speed=850, initial_time=datetime.datetime(2025, 10, 12, 12, 58), initial_radius=21.5):

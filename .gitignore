@@ -12,3 +12,4 @@ sc_data_functions/
 
 # Virtual environments
 .venv
+*.mp4

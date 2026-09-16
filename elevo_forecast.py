@@ -994,7 +994,7 @@ def make_frame(k):
             
             t = ((np.arange(201)-10)*np.pi/180)-(hc_lon1[cmeind1[0][p]]*np.pi/180)
             t1 = ((np.arange(201)-10)*np.pi/180)
-            
+             
             longcirc1 = []
             rcirc1 = []
             for i in range(3):

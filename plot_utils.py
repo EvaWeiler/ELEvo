@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt 
 import numpy as np 
 import elevo_utils
+import data_utils
+from datetime import datetime,timedelta
+import astropy.units as u
 
 def plot_spcs_cmepropagation(spcs,cme):
 
@@ -122,3 +125,62 @@ def plot_intersection_debug(cme, space_object, intersection_result, ensemble_idx
 
     fig.tight_layout()
     plt.show()
+
+
+
+def make_frame_sequence(start_date, end_date,cme,resolution=10):
+    space_craft_names = ['l1',
+                       'solo',
+                       'psp',
+                       'sta',
+                       'bepi',
+                       'mercury',
+                       'venus',
+                       'mars']
+    
+    spcs = data_utils.get_spcs_dates(start_date,end_date,space_craft_names,str(resolution)+'m',None)
+    time_array = np.arange(datetime.strptime(start_date,"%Y-%m-%d"), 
+                                     datetime.strptime(end_date,"%Y-%m-%d"), 
+                                     timedelta(minutes=resolution)).astype(datetime)
+    
+    for index in range(len(spcs[0].longitude)):
+        make_frame_video(spcs,index,time_array,cme)
+
+def make_frame_video(spcs,index,time_array,cme):
+    fig=plt.figure(1, figsize=(19.2,10.8), dpi=100) #full hd
+    ax = plt.subplot2grid((19,2), (0, 0), rowspan=19, projection='polar')
+    
+    backcolor='#052E37' #xkcd:black' '#052E37'
+
+    colors_spcs = {
+        'psp':'#052E37',
+        'bepi':'#5833FE',
+        'solo':'#F29707',
+        'l1':'#75CC41',
+        'sta':'#E75C13',
+        'mercury':'#9dabae',
+        'venus':'#8C11AA',
+        'mars':'#E75C13'
+
+    }
+  
+    cme_color='#8C99FD'
+    red = '#CC2C01' #'xkcd:magenta'
+    green = colors_spcs['l1'] #'#BFCE40' #'xkcd:green'
+    blue = '#5833FE' #'xkcd:azure'
+
+    symsize_planet=110
+    symsize_spacecraft=80
+
+    for spc in spcs:
+        ax.scatter(spc.longitude[index],spc.radial_distance[index],c=colors_spcs[spc.name],s=symsize_spacecraft)
+
+    ax = cme.plot_ellipse_at_time(time_array[index], ax=ax, n_points=200,
+                          unit=u.AU, ensemble_alpha=0.15,
+                          ensemble_color='steelblue', show_mean=True)
+    plt.savefig('data/plots/'+time_array[index].strftime("%Y-%m-%d_%H-%M")+'.png')
+    plt.close('all')
+
+    
+
+    

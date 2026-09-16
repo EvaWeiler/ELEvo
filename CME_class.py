@@ -111,7 +111,49 @@ class CME:
 
         return e_lon, u_r, e_lat
             
+    def plot_ellipse_at_time(self, target_time, ax=None, n_points=200,
+                          unit=u.AU, ensemble_alpha=0.15,
+                          ensemble_color='steelblue', show_mean=True):
+        """
+        Plot the ensemble of CME ellipses in the ecliptic plane at the
+        timestep closest to `target_time` (a datetime object).
+        """
+        # 1. find nearest index in time_array (array of python datetimes)
+        diffs = np.array([abs((t - target_time).total_seconds())
+                        for t in self.time_array])
+        i_t = np.argmin(diffs)
 
+        if diffs[i_t]/60.0>10.0:
+            return
+
+
+        a = self.cme_a[i_t,:]
+        b = self.cme_b[i_t,:]
+        c = self.cme_c[i_t,:]
+
+      
+
+        t = ((np.arange(201)-10)*np.pi/180)-(self.longitude)
+        t1 = ((np.arange(201)-10)*np.pi/180)
+
+
+        xs = (c*np.cos(self.longitude))[:,None]+((a*b)[:,None]/np.sqrt((b[:,None]*np.cos(t1))**2+(a[:,None]*np.sin(t1))**2))*np.sin(t)
+        ys = (c*np.sin(self.longitude))[:,None]+((a*b)[:,None]/np.sqrt((b[:,None]*np.cos(t1))**2+(a[:,None]*np.sin(t1))**2))*np.cos(t)
+
+
+        theta = np.arctan2(ys, xs)
+        r=np.sqrt(xs**2+ys**2)
+        
+
+        for i in range(r.shape[0]):
+            ax.plot(theta[i], r[i], color=ensemble_color,
+                    alpha=ensemble_alpha, lw=0.8)
+
+        if show_mean:
+            ax.plot(theta.mean(axis=0), r.mean(axis=0),
+                    color='crimson', lw=2, label='ensemble mean')
+
+        return ax
     
 
 

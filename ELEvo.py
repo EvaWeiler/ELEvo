@@ -60,12 +60,6 @@ def Run_one_CME(names,resolution=10,nb_ensemble=10000,days_duration=5):
             'arrival_speeds':arrival_speeds,
         }
         
-        # # compute how many ensemble members evetually arrive at earth
-        # n_arrival = np.sum(bound_idxs[0] != None)
-        # print(f"Number of ensemble members that arrive at {spc.name}: {n_arrival} / {bound_idxs.shape[1]} ({n_arrival/bound_idxs.shape[1]*100:.2f}%)")
-        # print(f"Ensemble member {debug_ensemble_idx} arrival time: {arrival_times[debug_ensemble_idx]}")
-        # print(f"Ensemble member {debug_ensemble_idx} arrival speed: {arrival_speeds[debug_ensemble_idx]} km/s")
-        
     return cme, spcs,intersections
 
 
@@ -106,4 +100,7 @@ if __name__ == "__main__":
    
 
     cme, spcs,intersections = Run_one_CME(names)
-    print_arrivals(intersections)
+
+    # print_arrivals(intersections)
+
+    plot_utils.make_frame_sequence("2025-02-12", "2025-02-17",cme,resolution=10)

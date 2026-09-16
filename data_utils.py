@@ -51,7 +51,7 @@ def convert_HEEQ_to_HAE(long,lat,radius,time_obs):
     r,phi,theta = cart_heeq_to_sphere(hae_cartesian.x*au_in_rsun,hae_cartesian.y*au_in_rsun,hae_cartesian.z*au_in_rsun)
     return np.rad2deg(theta.value),np.rad2deg(phi.value),r.value
 
-def load_donki_cmes(path_json):
+def load_donki_cmes(path_json,resolution,nb_ensemble,days_duration):
     # Opening JSON file
     with open(path_json) as json_file:
         donki_data = json.load(json_file)
@@ -61,22 +61,25 @@ def load_donki_cmes(path_json):
         for analysis in row['cmeAnalyses']:
             if analysis['longitude'] is not None and analysis['latitude'] is not None:
                 long,lat,radius = convert_HEEQ_to_HAE(analysis['longitude'],analysis['latitude'],21.5,analysis['time21_5'])
-                cme = ELEvo.CME(analysis['halfAngle'],
-                                long,
-                                lat,
-                                0.0,
+                cme = ELEvo.CME(np.deg2rad(analysis['halfAngle']),
+                                np.deg2rad(long),
+                                np.deg2rad(lat),
+                                np.deg2rad(0.0),
                                 0.7,
                                 analysis['speed'],
                                 analysis['time21_5'],
                                 21.5,
-                                analysis['featureCode'],
-                                'DONKI'
+                                ensemble_time_resolution=resolution,
+                                nb_ensemble=nb_ensemble,
+                                days_duration=days_duration,
+                                feature_type=analysis['featureCode'],
+                                source_of_info='DONKI'
                                 )
                 CMEs.append(cme)
     return CMEs
 
 
-def download_donki_cmes(date_start,date_end,data_type='CME',file_path='data/donki_data.json'):
+def download_donki_cmes(date_start,date_end,data_type='CME',file_path='data/'):
     """
     Download DONKI data for the specified data type and save it as a JSON file.
 
@@ -93,7 +96,7 @@ def download_donki_cmes(date_start,date_end,data_type='CME',file_path='data/donk
         response.raise_for_status()  # Raises HTTPError for bad responses (4xx/5xx)
 
         # Save content as JSON file
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(f"{file_path}{date_start.strftime("%Y-%m-%d")}_{date_end.strftime("%Y-%m-%d")}_HAE.json", 'w', encoding='utf-8') as f:
             f.write(response.text)
 
     except requests.RequestException as e:

@@ -98,7 +98,7 @@ if __name__ == "__main__":
                'mars']
        
    
-
+    # data_utils.download_donki_cmes(datetime.datetime(2025,2,12),datetime.datetime(2025,2,13),data_type='CME',file_path='data/')
     cme, spcs,intersections = Run_one_CME(names,resolution=10,nb_ensemble=100,days_duration=5)
 
     # print_arrivals(intersections)

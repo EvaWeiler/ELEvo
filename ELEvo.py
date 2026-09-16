@@ -4,25 +4,30 @@ import elevo_utils
 import data_utils
 import plot_utils
 
-def Run_one_CME(names):
 
-    resolution = '10m'
-    nb_ensemble = 10000
-    days_duration = 5
-    time_resolution = 10
+def Run_one_CME(names,resolution=10,nb_ensemble=10000,days_duration=5):
 
-    cme = CME(np.deg2rad(45),np.deg2rad(157),np.deg2rad(-10),0,0.7,450,datetime.datetime(2025,2,10,12,58),21.5,'SE','Dummy values')
+    cme = CME(half_width=np.deg2rad(45),
+              longitude=np.deg2rad(157),
+              latitude=np.deg2rad(-10),
+              tilt=0,
+              f=0.7,
+              initial_speed=450,
+              initial_time=datetime.datetime(2025,2,12,12,58),
+              initial_radius=21.5,
+              ensemble_time_resolution=resolution,
+              nb_ensemble=nb_ensemble,
+              days_duration=days_duration,
+              feature_type='SE',
+              source_of_info='Dummy values')
 
-    start_date = "2025-02-10"
-    end_date = "2025-02-15"
-    spcs = []
 
-    for name in names:                 
-        data_utils.create_positions_file(name,start_date,end_date,step=resolution,save_path='data/spc_pos/',overwrite=False)
-        positions_dict = data_utils.load_positions_jpl('data/spc_pos/', start_date,end_date,resolution, name)
-        spcs.append(SpaceObject(name, positions_dict['lon'], positions_dict['lat'], positions_dict['r'], 'HAE', cme.initial_time, timesteps=cme.ensemble_timesteps, time_resolution=time_resolution))
 
-    
+
+    start_date = cme.time_array[0].strftime("%Y-%m-%d") 
+    end_date = cme.time_array[-1].strftime("%Y-%m-%d") 
+
+    spcs = data_utils.get_spcs_dates(start_date,end_date,names,str(resolution)+'m',cme.ensemble_timesteps)
 
     
     std_ensemble = {
@@ -36,7 +41,7 @@ def Run_one_CME(names):
             'initial_radius' : 2,
                 
         }
-    cme.initialize_ensemble(400,1.0e-7,std_ensemble,nb_ensemble=nb_ensemble,method_type='skewed',days_duration=days_duration)
+    cme.initialize_ensemble(400,1.0e-7,std_ensemble,method_type='skewed')
     cme.propagate_cme()
     cme.calculate_ellipse_parameters()
 

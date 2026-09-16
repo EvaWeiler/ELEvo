@@ -3,7 +3,7 @@ import numpy as np
 import datetime
 import elevo_utils
 import astropy.units as u
-
+from datetime import datetime,timedelta
 
 @dataclass
 class CME:
@@ -14,8 +14,11 @@ class CME:
     tilt: float
     f: float 
     initial_speed: float 
-    initial_time : float
+    initial_time : datetime
     initial_radius :float 
+    ensemble_time_resolution : float
+    nb_ensemble:int
+    days_duration: int
     feature_type : str
     source_of_info : str
 
@@ -31,23 +34,28 @@ class CME:
     cme_r_ensemble : np.array = None
     cme_v_ensemble : np.array = None
     ensemble_timesteps : np.array = None
-    ensemble_time_resolution  :float = None
+    time_array: np.array = None
 
-    def initialize_ensemble(self, swinit,gammainit,std_ensemble,nb_ensemble=10000,random_seed=31082026,method_type='normal',days_duration=5, minute_resolution=10):
+    def __post_init__(self):
+        self.ensemble_timesteps = elevo_utils.create_time_grid(self.nb_ensemble,self.days_duration,self.ensemble_time_resolution)
+        self.time_array  = np.arange(self.initial_time, 
+                                     self.initial_time + timedelta(days=self.days_duration), 
+                                     timedelta(minutes=self.ensemble_time_resolution)).astype(datetime)
+
+    def initialize_ensemble(self, swinit,gammainit,std_ensemble,random_seed=31082026,method_type='normal'):
 
         np.random.seed(random_seed)
         if method_type == 'normal':
-            self.gamma_array        = np.random.normal(gammainit,std_ensemble['gamma'],nb_ensemble)
-            self.ambient_wind_array = np.random.normal(swinit,std_ensemble['sw'],nb_ensemble)
-            self.initial_speed_array = np.random.normal(self.initial_speed,std_ensemble['initial_speed'],nb_ensemble)
-            self.initial_radius_array = np.random.normal(self.initial_radius,std_ensemble['initial_radius'],nb_ensemble)
+            self.gamma_array        = np.random.normal(gammainit,std_ensemble['gamma'],self.nb_ensemble)
+            self.ambient_wind_array = np.random.normal(swinit,std_ensemble['sw'],self.nb_ensemble)
+            self.initial_speed_array = np.random.normal(self.initial_speed,std_ensemble['initial_speed'],self.nb_ensemble)
+            self.initial_radius_array = np.random.normal(self.initial_radius,std_ensemble['initial_radius'],self.nb_ensemble)
 
         elif method_type=="skewed":
-            self.initial_speed_array, self.gamma_array, self.ambient_wind_array   = elevo_utils.skewed_distribution(self.initial_speed,nb_ensemble)
-            self.initial_radius_array = np.random.normal(self.initial_radius,std_ensemble['initial_radius'],nb_ensemble)
+            self.initial_speed_array, self.gamma_array, self.ambient_wind_array   = elevo_utils.skewed_distribution(self.initial_speed,self.nb_ensemble)
+            self.initial_radius_array = np.random.normal(self.initial_radius,std_ensemble['initial_radius'],self.nb_ensemble)
 
-        self.ensemble_timesteps = elevo_utils.create_time_grid(nb_ensemble,days_duration,minute_resolution)
-        self.ensemble_time_resolution = minute_resolution
+        
         
     def propagate_cme(self):
 

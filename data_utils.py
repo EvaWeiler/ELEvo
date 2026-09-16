@@ -14,7 +14,7 @@ from datetime import datetime,timedelta
 import elevo_utils
 import pickle
 import re
-
+from space_object_class import SpaceObject
 
 
 def sphere_to_cart_heeq(r, lat_rad, lon_rad):
@@ -285,6 +285,128 @@ def load_positions_jpl(data_path, date_start,date_end,step, space_obj):
 
 
     return {'time': time_array.flatten(), 'r': r_array.flatten(), 'lon': lon_array.flatten(), 'lat': lat_array.flatten(), 'x': x_array.flatten(), 'y': y_array.flatten(), 'z': z_array.flatten()}
+
+
+DATE_FMT = "%Y-%m-%d"  # adjust to match whatever format start_date/end_date actually use
+
+def _parse_date(date_str):
+    return datetime.strptime(date_str, DATE_FMT)
+
+def _find_existing_files(save_path, name, resolution):
+    """Locate cached files for this spacecraft/resolution and parse their date ranges."""
+    pattern = re.compile(rf"^{re.escape(name)}_{re.escape(str(resolution))}_(.+)_(.+)_HAE\.pkl$")
+    matches = []
+    if not os.path.isdir(save_path):
+        return matches
+    for fname in os.listdir(save_path):
+        m = pattern.match(fname)
+        if m:
+            f_start, f_end = m.group(1), m.group(2)
+            try:
+                matches.append((os.path.join(save_path, fname),
+                                 _parse_date(f_start), _parse_date(f_end),
+                                 f_start, f_end))
+            except ValueError:
+                continue  # filename didn't match expected date format, skip
+    return matches
+
+def _load_pkl(file_path, space_obj):
+    with open(file_path, "rb") as f:
+        pos = pickle.load(f)
+    pos = pos[space_obj]
+    return {k: np.asarray(v).flatten() for k, v in pos.items()}
+
+def _save_pkl(file_path, space_obj, data_dict):
+    with open(file_path, "wb") as f:
+        pickle.dump({space_obj: data_dict}, f)
+
+def _merge_data(dicts):
+    """Concatenate multiple position dicts, sort by time, drop duplicate timestamps."""
+    keys = dicts[0].keys()
+    merged = {k: np.concatenate([d[k] for d in dicts]) for k in keys}
+    order = np.argsort(merged['time'])
+    for k in merged:
+        merged[k] = merged[k][order]
+    _, unique_idx = np.unique(merged['time'], return_index=True)
+    unique_idx = np.sort(unique_idx)
+    for k in merged:
+        merged[k] = merged[k][unique_idx]
+    return merged
+
+def _slice_by_time(data_dict, start_dt, end_dt):
+    times = data_dict['time']
+    mask = (times >= np.datetime64(start_dt)) & (times <= np.datetime64(end_dt))
+    return {k: v[mask] for k, v in data_dict.items()}
+
+def ensure_positions_range(name, start_date, end_date, resolution, save_path='data/spc_pos/'):
+    """
+    Guarantees a cached file covering [start_date, end_date] for `name`, downloading
+    only whatever sub-range is missing and merging with any existing overlapping
+    file(s). Returns the position dict sliced to the exact requested range.
+    """
+    os.makedirs(save_path, exist_ok=True)
+    req_start_dt, req_end_dt = _parse_date(start_date), _parse_date(end_date)
+
+    existing = _find_existing_files(save_path, name, resolution)
+    overlapping = [e for e in existing if e[1] <= req_end_dt and e[2] >= req_start_dt]
+
+    # Case 1: an existing file already fully covers the requested range
+    for file_path, f_start_dt, f_end_dt, *_ in overlapping:
+        if f_start_dt <= req_start_dt and f_end_dt >= req_end_dt:
+            return _slice_by_time(_load_pkl(file_path, name), req_start_dt, req_end_dt)
+
+    # Case 2: nothing on disk overlaps at all -> plain download, as before
+    if not overlapping:
+        create_positions_file(name, start_date, end_date, step=resolution,
+                               save_path=save_path, overwrite=False)
+        return load_positions_jpl(save_path, start_date, end_date, resolution, name)
+
+    # Case 3: partial coverage -> download only the missing gap(s), merge, rename
+    overlapping.sort(key=lambda e: e[1])
+    union_start_dt = min(req_start_dt, min(e[1] for e in overlapping))
+    union_end_dt = max(req_end_dt, max(e[2] for e in overlapping))
+
+    pieces = [_load_pkl(fp, name) for fp, *_ in overlapping]
+
+    covered = sorted([(e[1], e[2]) for e in overlapping])
+    gaps, cursor = [], union_start_dt
+    for c_start, c_end in covered:
+        if c_start > cursor:
+            gaps.append((cursor, c_start))
+        cursor = max(cursor, c_end)
+    if cursor < union_end_dt:
+        gaps.append((cursor, union_end_dt))
+
+    for g_start_dt, g_end_dt in gaps:
+        g_start, g_end = g_start_dt.strftime(DATE_FMT), g_end_dt.strftime(DATE_FMT)
+        create_positions_file(name, g_start, g_end, step=resolution,
+                               save_path=save_path, overwrite=False)
+        pieces.append(load_positions_jpl(save_path, g_start, g_end, resolution, name))
+        gap_file = os.path.join(save_path, f"{name}_{resolution}_{g_start}_{g_end}_HAE.pkl")
+        if os.path.exists(gap_file):
+            os.remove(gap_file)  # folded into the merged file below
+
+    merged = _merge_data(pieces)
+
+    for file_path, *_ in overlapping:
+        os.remove(file_path)  # superseded by the merged, renamed file
+
+    union_start, union_end = union_start_dt.strftime(DATE_FMT), union_end_dt.strftime(DATE_FMT)
+    new_file_path = os.path.join(save_path, f"{name}_{resolution}_{union_start}_{union_end}_HAE.pkl")
+    _save_pkl(new_file_path, name, merged)
+
+    return _slice_by_time(merged, req_start_dt, req_end_dt)
+
+
+def get_spcs_dates(start_date,end_date,names,resolution,timestemps):
+    spcs = []
+    for name in names:                 
+        positions_dict = ensure_positions_range(name, start_date, end_date, resolution,
+                                                 save_path='data/spc_pos/')
+        spcs.append(SpaceObject(name, positions_dict['lon'], positions_dict['lat'], positions_dict['r'], 'HAE', start_date, timesteps=timestemps, time_resolution=resolution))
+    return spcs
+        
+
 
 if __name__ == "__main__":
     download_donki_cmes(datetime(2026,1,12),datetime(2026,1,17))

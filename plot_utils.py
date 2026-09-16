@@ -140,9 +140,9 @@ def make_frame_sequence(start_date, end_date,cme,resolution=10):
     
     spcs = data_utils.get_spcs_dates(start_date,end_date,space_craft_names,str(resolution)+'m',None)
     time_array = np.arange(datetime.strptime(start_date,"%Y-%m-%d"), 
-                                     datetime.strptime(end_date,"%Y-%m-%d"), 
+                                     datetime.strptime(end_date,"%Y-%m-%d")+timedelta(minutes=resolution), 
                                      timedelta(minutes=resolution)).astype(datetime)
-    
+ 
     for index in range(len(spcs[0].longitude)):
         make_frame_video(spcs,index,time_array,cme)
 
@@ -171,6 +171,7 @@ def make_frame_video(spcs,index,time_array,cme):
 
     symsize_planet=110
     symsize_spacecraft=80
+    fsize=13
 
     for spc in spcs:
         ax.scatter(spc.longitude[index],spc.radial_distance[index],c=colors_spcs[spc.name],s=symsize_spacecraft)
@@ -178,6 +179,10 @@ def make_frame_video(spcs,index,time_array,cme):
     ax = cme.plot_ellipse_at_time(time_array[index], ax=ax, n_points=200,
                           unit=u.AU, ensemble_alpha=0.15,
                           ensemble_color='steelblue', show_mean=True)
+
+    ax.set_theta_zero_location('E')
+    plt.rgrids((0.1,0.3,0.5,0.7,1.0),('0.10','0.3','0.5','0.7','1.0 AU'),angle=125, fontsize=fsize-3,alpha=0.5, color=backcolor)
+
     plt.savefig('data/plots/'+time_array[index].strftime("%Y-%m-%d_%H-%M")+'.png')
     plt.close('all')
 

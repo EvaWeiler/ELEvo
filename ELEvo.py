@@ -1,5 +1,5 @@
 from CME_class import * 
-from space_object_class import *
+from Space_object_class import *
 import elevo_utils
 import data_utils
 import plot_utils
@@ -99,7 +99,7 @@ if __name__ == "__main__":
        
    
 
-    cme, spcs,intersections = Run_one_CME(names)
+    cme, spcs,intersections = Run_one_CME(names,resolution=10,nb_ensemble=100,days_duration=5)
 
     # print_arrivals(intersections)
 

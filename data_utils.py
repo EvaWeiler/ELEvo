@@ -14,7 +14,7 @@ from datetime import datetime,timedelta
 import elevo_utils
 import pickle
 import re
-from space_object_class import SpaceObject
+from Space_object_class import SpaceObject
 
 
 def sphere_to_cart_heeq(r, lat_rad, lon_rad):

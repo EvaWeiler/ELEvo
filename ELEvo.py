@@ -46,27 +46,51 @@ def Run_one_CME(names,resolution=10,nb_ensemble=10000,days_duration=5):
     cme.calculate_ellipse_parameters()
 
     
-    plot_utils.plot_spcs_cmepropagation(spcs,cme)
-
+    intersections = {}
     for spc in spcs:
 
         intersection = spc.calculate_intersection(cme)
-
-
         bound_idxs = elevo_utils.get_boundary_indices(intersection)
         arrival_times, arrival_speeds = elevo_utils.calculate_arrival(bound_idxs, cme.ensemble_timesteps, cme.cme_v_ensemble, cme.initial_time)
-        debug_ensemble_idx = -1
 
-        # plot_utils.plot_intersection_debug(cme,spc,intersection,100)
+        intersections[spc.name] = {
+            'intersecion':intersection,
+            'bound_idxs':bound_idxs,
+            'arrival_times':arrival_times,
+            'arrival_speeds':arrival_speeds,
+        }
         
+        # # compute how many ensemble members evetually arrive at earth
+        # n_arrival = np.sum(bound_idxs[0] != None)
+        # print(f"Number of ensemble members that arrive at {spc.name}: {n_arrival} / {bound_idxs.shape[1]} ({n_arrival/bound_idxs.shape[1]*100:.2f}%)")
+        # print(f"Ensemble member {debug_ensemble_idx} arrival time: {arrival_times[debug_ensemble_idx]}")
+        # print(f"Ensemble member {debug_ensemble_idx} arrival speed: {arrival_speeds[debug_ensemble_idx]} km/s")
         
-        # compute how many ensemble members evetually arrive at earth
+    return cme, spcs,intersections
+
+
+def print_arrivals(intersections):
+    for spc in intersections.keys():
+        bound_idxs = intersections[spc]['bound_idxs']
+        arrival_times = intersections[spc]['arrival_times']
+        clean_datetime = arrival_times[arrival_times != None].astype('datetime64[ns]')
+        arrival_speeds = intersections[spc]['arrival_speeds']
         n_arrival = np.sum(bound_idxs[0] != None)
-        print(f"Number of ensemble members that arrive at {spc.name}: {n_arrival} / {bound_idxs.shape[1]} ({n_arrival/bound_idxs.shape[1]*100:.2f}%)")
-        print(f"Ensemble member {debug_ensemble_idx} arrival time: {arrival_times[debug_ensemble_idx]}")
-        print(f"Ensemble member {debug_ensemble_idx} arrival speed: {arrival_speeds[debug_ensemble_idx]} km/s")
-        
+        print(f"Number of ensemble members that arrive at {spc}: {n_arrival} / {bound_idxs.shape[1]} ({n_arrival/bound_idxs.shape[1]*100:.2f}%)")
 
+        if n_arrival>0:
+            mean_time   = np.mean(clean_datetime.view('i8')).astype('datetime64[ns]')
+            mean_time_str = np.datetime_as_string(mean_time, unit='s').split('T')[-1]
+
+            
+            std_time = np.std(clean_datetime.view('i8')).astype('timedelta64[ns]')
+            std_hours = std_time / np.timedelta64(1, 'h')
+
+            mean_speeds = np.mean(arrival_speeds[arrival_speeds != None])
+            std_speeds = np.std(arrival_speeds[arrival_speeds != None])
+
+            print(f"Average ensemble arrival time: {mean_time_str} ± {std_hours:.2f} hours")
+            print(f"Average  ensemble arrival speed: {mean_speeds} \u00B1 {std_speeds}")
 
 
 if __name__ == "__main__":
@@ -81,4 +105,5 @@ if __name__ == "__main__":
        
    
 
-    Run_one_CME(names)
+    cme, spcs,intersections = Run_one_CME(names)
+    print_arrivals(intersections)

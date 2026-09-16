@@ -407,8 +407,4 @@ def get_spcs_dates(start_date,end_date,names,resolution,timestemps):
     return spcs
         
 
-
-if __name__ == "__main__":
-    download_donki_cmes(datetime(2026,1,12),datetime(2026,1,17))
-
     

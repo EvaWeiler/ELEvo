@@ -8,19 +8,25 @@ from elevo_utils import calculate_arrival, get_boundary_indices
 from Space_object_class import SpaceObject
 
 
-def build_cme(half_width=45., longitude=0.0, latitude=0.0, tilt=0.0, f=0.7, initial_speed=850, initial_time=datetime.datetime(2025, 10, 12, 12, 58), initial_radius=21.5):
+def build_cme(half_width=45., longitude=0.0, latitude=0.0, tilt=0.0, f=0.7, initial_speed=850, initial_time=datetime.datetime(2025, 10, 12, 12, 58), initial_radius=21.5,nb_ensemble=20):
     return CME(
         half_width=np.deg2rad(half_width),
         longitude=np.deg2rad(longitude),
         latitude=np.deg2rad(latitude),
-        tilt=tilt,
+        tilt=np.deg2rad(tilt),
         f=f,
         initial_speed=initial_speed,
         initial_time=initial_time,
         initial_radius=initial_radius,
+        ensemble_time_resolution=10,
+        nb_ensemble=nb_ensemble,
+        days_duration=14,
         feature_type='SH',
         source_of_info='test',
     )
+
+
+
 
 
 DEFAULT_STD_ENSEMBLE = {
@@ -33,7 +39,7 @@ ZERO_STD_ENSEMBLE = dict.fromkeys(DEFAULT_STD_ENSEMBLE, 0)
 def run_pipeline(cme, spacecraft_longitude_deg, spacecraft_latitude_deg, nb_ensemble=20, days_duration=14, std_ensemble=DEFAULT_STD_ENSEMBLE):
 
     cme.initialize_ensemble(
-        400, 0.2, std_ensemble, nb_ensemble=nb_ensemble, random_seed=42, method_type='normal',
+        400, 0.2, std_ensemble, random_seed=42, method_type='normal',
     )
     cme.propagate_cme()
     cme.calculate_ellipse_parameters()
@@ -126,14 +132,14 @@ class TestArrivalApproximate:
 # The centre-aligned cases share identical values because the spacecraft sits on the CME propagation axis.
 
 REFERENCE_CASES = [
-    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=0.0), 0., 0., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-lon0-lat0_hit-center"),
-    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=0.0), 20., 0., datetime.datetime(2025, 10, 15, 0, 13), 554.1255556480455, id="hw45-lon0-lat0_hit-lon-offset20"),
-    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=0.0), 0., 20., datetime.datetime(2025, 10, 15, 7, 43), 542.2835956501187, id="hw45-lon0-lat0_hit-lat-offset20"),
-    pytest.param(build_cme(half_width=30., longitude=0.0, latitude=0.0), 0., 0., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw30-lon0-lat0_hit-center"),
-    pytest.param(build_cme(half_width=45., longitude=30.0, latitude=0.0), 30., 0., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-lon30-lat0_hit-center"),
-    pytest.param(build_cme(half_width=45., longitude=200.0, latitude=0.0), 200., 0., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-lon200-lat0_hit-center"),
-    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=30.0), 0., 30., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-lat30_hit-center"),
-    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=-30.0), 0., -30., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-latneg30_hit-center"),
+    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=0.0,nb_ensemble=1), 0., 0., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-lon0-lat0_hit-center"),
+    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=0.0,nb_ensemble=1), 20., 0., datetime.datetime(2025, 10, 15, 0, 13), 554.1255556480455, id="hw45-lon0-lat0_hit-lon-offset20"),
+    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=0.0,nb_ensemble=1), 0., 20., datetime.datetime(2025, 10, 15, 7, 43), 542.2835956501187, id="hw45-lon0-lat0_hit-lat-offset20"),
+    pytest.param(build_cme(half_width=30., longitude=0.0, latitude=0.0,nb_ensemble=1), 0., 0., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw30-lon0-lat0_hit-center"),
+    pytest.param(build_cme(half_width=45., longitude=30.0, latitude=0.0,nb_ensemble=1), 30., 0., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-lon30-lat0_hit-center"),
+    pytest.param(build_cme(half_width=45., longitude=200.0, latitude=0.0,nb_ensemble=1), 200., 0., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-lon200-lat0_hit-center"),
+    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=30.0,nb_ensemble=1), 0., 30., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-lat30_hit-center"),
+    pytest.param(build_cme(half_width=45., longitude=0.0, latitude=-30.0,nb_ensemble=1), 0., -30., datetime.datetime(2025, 10, 14, 22, 13), 557.6238756150044, id="hw45-latneg30_hit-center"),
 ]
 
 

@@ -24,9 +24,13 @@ def make_cme(longitude=0.0, latitude=0.0, cme_a=None, cme_b=None, cme_c=None):
         initial_speed=850,
         initial_time=datetime.datetime(2025, 1, 1),
         initial_radius=21.5,
+        ensemble_time_resolution=10,
+        nb_ensemble=20,
+        days_duration=14,
         feature_type='SH',
         source_of_info='test',
     )
+    
     if cme_a is not None:
         cme.cme_a = cme_a
         cme.cme_b = cme_b
